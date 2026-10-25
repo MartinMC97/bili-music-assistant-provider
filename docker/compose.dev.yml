@@ -9,5 +9,6 @@ services:
       LOG_LEVEL: debug
       PYTHONDONTWRITEBYTECODE: "1"
     volumes:
-      - ../provider/bilibili:/app/music_assistant/providers/bilibili:ro
+      - ../provider/bilibili:/app/venv/lib/python3.14/site-packages/music_assistant/providers/bilibili:ro
       - ../.dev-data:/data
+      - ../:/workspace

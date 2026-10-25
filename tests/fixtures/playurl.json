@@ -1,0 +1,48 @@
+{
+  "code": 0,
+  "data": {
+    "dash": {
+      "duration": 213,
+      "audio": [
+        {
+          "id": 30216,
+          "baseUrl": "https://cdn.example.invalid/audio-30216.m4s?deadline=9999999999",
+          "backupUrl": [
+            "https://backup.example.invalid/audio-30216.m4s?deadline=9999999999"
+          ],
+          "bandwidth": 43962,
+          "mimeType": "audio/mp4",
+          "codecid": 0,
+          "codecs": "mp4a.40.5"
+        },
+        {
+          "id": 30280,
+          "baseUrl": "https://cdn.example.invalid/audio-30280.m4s?deadline=9999999999",
+          "backupUrl": [
+            "https://backup.example.invalid/audio-30280.m4s?deadline=9999999999"
+          ],
+          "bandwidth": 203786,
+          "mimeType": "audio/mp4",
+          "codecid": 0,
+          "codecs": "mp4a.40.2"
+        },
+        {
+          "id": 30232,
+          "baseUrl": "https://cdn.example.invalid/audio-30232.m4s?deadline=9999999999",
+          "backupUrl": [
+            "https://backup.example.invalid/audio-30232.m4s?deadline=9999999999"
+          ],
+          "bandwidth": 102931,
+          "mimeType": "audio/mp4",
+          "codecid": 0,
+          "codecs": "mp4a.40.2"
+        }
+      ],
+      "dolby": {
+        "type": 0,
+        "audio": null
+      },
+      "flac": null
+    }
+  }
+}

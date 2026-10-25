@@ -1,0 +1,69 @@
+{
+  "code": 0,
+  "data": {
+    "page": 1,
+    "numResults": 1000,
+    "result": [
+      {
+        "bvid": "BV1BZbSzZEGT",
+        "aid": 114912554719208,
+        "mid": 9666167,
+        "author": "VV音乐局",
+        "title": "【𝐇𝐢-𝐑𝐞𝐬无损音质】｜《<em class=\"keyword\">晴天</em>》- <em class=\"keyword\">周杰伦</em> -‘故事的小黄花’",
+        "duration": "4:30",
+        "pic": "//i0.hdslb.com/bfs/archive/b72e06e408b1636bb9ca8df55a171e44d6ba1702.jpg",
+        "pubdate": 1753667700,
+        "play": 3322671,
+        "type": "video"
+      },
+      {
+        "bvid": "BV1d4411N7zD",
+        "aid": 55185686,
+        "mid": 13838234,
+        "author": "zyl2012_音乐无限",
+        "title": "【4K修复】<em class=\"keyword\">周杰伦</em> - <em class=\"keyword\">晴天</em>MV 2160P修复版",
+        "duration": "5:17",
+        "pic": "//i1.hdslb.com/bfs/archive/6770f3a7d60f21469194251726588cee3b8bdb45.jpg",
+        "pubdate": 1560167152,
+        "play": 17654624,
+        "type": "video"
+      },
+      {
+        "bvid": "BV16wnv6nE2F",
+        "aid": 117476767570805,
+        "mid": 7357950,
+        "author": "陈知许",
+        "title": "《<em class=\"keyword\">晴天</em>》 - <em class=\"keyword\">周杰伦</em> 在百万豪装专业录音棚听无损",
+        "duration": "4:32",
+        "pic": "//i1.hdslb.com/bfs/archive/ce2c7420949f7e15b72df809e6723e2ee14accfe.jpg",
+        "pubdate": 1792553419,
+        "play": 3213,
+        "type": "video"
+      },
+      {
+        "bvid": "BV1k1Gcz9ETR",
+        "aid": 114822226117076,
+        "mid": 3546930961451341,
+        "author": "如歌如梦",
+        "title": "【4K Hi-Res】<em class=\"keyword\">晴天</em>-<em class=\"keyword\">周杰伦</em>",
+        "duration": "4:30",
+        "pic": "//i1.hdslb.com/bfs/archive/7cd9aeaeaa0bf2341551463ca90e8e47cbff0a62.jpg",
+        "pubdate": 1752048670,
+        "play": 1168257,
+        "type": "video"
+      },
+      {
+        "bvid": "BV1nnWFzGEJQ",
+        "aid": 115240045909995,
+        "mid": 3494372542778153,
+        "author": "寻意zzzz",
+        "title": "<em class=\"keyword\">周杰伦</em>——《<em class=\"keyword\">晴天</em>》",
+        "duration": "4:27",
+        "pic": "//i1.hdslb.com/bfs/archive/6190f20921a6f9c09f7992f183285961dd421bcc.jpg",
+        "pubdate": 1758499200,
+        "play": 514677,
+        "type": "video"
+      }
+    ]
+  }
+}

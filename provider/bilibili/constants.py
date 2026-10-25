@@ -97,11 +97,7 @@ CDN_HEALTH_TTL: Final = 600
 # A single -headers argument, CRLF separated as ffmpeg expects.
 FFMPEG_HEADERS: Final = [
     "-headers",
-    (
-        f"Referer: {BILI_REFERER}\r\n"
-        f"Origin: {BILI_REFERER}\r\n"
-        f"User-Agent: {USER_AGENT}\r\n"
-    ),
+    (f"Referer: {BILI_REFERER}\r\nOrigin: {BILI_REFERER}\r\nUser-Agent: {USER_AGENT}\r\n"),
 ]
 
 # ---------------------------------------------------------------------------

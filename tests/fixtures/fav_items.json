@@ -1,0 +1,44 @@
+{
+  "code": 0,
+  "data": {
+    "medias": [
+      {
+        "bvid": "BV1GJ411x7h7",
+        "title": "【官方 MV】Never Gonna Give You Up - Rick Astley",
+        "cover": "//i1.hdslb.com/bfs/archive/x.jpg",
+        "duration": 213,
+        "upper": {
+          "mid": 123,
+          "name": "UP-A"
+        },
+        "attr": 0,
+        "fav_time": 1700000000
+      },
+      {
+        "bvid": "BV1xx411c7mD",
+        "title": "已失效稿件",
+        "cover": "//i1.hdslb.com/bfs/archive/y.jpg",
+        "duration": 100,
+        "upper": {
+          "mid": 456,
+          "name": "UP-B"
+        },
+        "attr": 9,
+        "fav_time": 1700000001
+      },
+      {
+        "bvid": "BV1d4411N7zD",
+        "title": "周杰伦 - 晴天【4K修复】",
+        "cover": "//i1.hdslb.com/bfs/archive/z.jpg",
+        "duration": 269,
+        "upper": {
+          "mid": 789,
+          "name": "UP-C"
+        },
+        "attr": 0,
+        "fav_time": 1700000002
+      }
+    ],
+    "has_more": false
+  }
+}

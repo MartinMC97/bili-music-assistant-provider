@@ -628,17 +628,18 @@ MA 在流错误时**复用同一份 `StreamDetails`**，不会重新调用 provi
 
 ### 8.1 本地开发回路（当前主用）
 
-目标：改一行代码 → 重启容器 → 30 秒内看到效果。**MA 2.10.7 没有 provider 热重载**，必须重启进程。
+目标：改一行代码 → 重启容器 → 30 秒内看到效果。**MA 2.10.8 没有 provider 热重载**，必须重启进程。
 
 ```yaml
 # docker/compose.dev.yml
 services:
-  music-assistant-server:
+  music-assistant:
     image: ghcr.io/music-assistant/server:2.10.8
     environment:
       PYTHONDONTWRITEBYTECODE: "1"   # 只读挂载时避免 __pycache__ 报错
     volumes:
-      - ./provider/bilibili:/app/music_assistant/providers/bilibili:ro
+      # 注意：官方镜像把包装在 venv 的 site-packages 里，不是 /app/music_assistant
+      - ./provider/bilibili:/app/venv/lib/python3.14/site-packages/music_assistant/providers/bilibili:ro
       - ./data:/data
 ```
 
@@ -646,8 +647,8 @@ services:
 #!/usr/bin/env bash
 # scripts/dev.sh
 set -euo pipefail
-docker compose -f docker/compose.dev.yml restart music-assistant-server
-docker compose -f docker/compose.dev.yml logs -f --tail=100 music-assistant-server
+docker compose -f docker/compose.dev.yml restart music-assistant
+docker compose -f docker/compose.dev.yml logs -f --tail=120 music-assistant
 ```
 
 日常流程：
@@ -670,19 +671,19 @@ docker compose -f docker/compose.dev.yml logs -f --tail=100 music-assistant-serv
 ARG MA_VERSION=2.10.8
 FROM ghcr.io/music-assistant/server:${MA_VERSION}
 
-# 唯一源码树直接进镜像
-COPY provider/bilibili /app/music_assistant/providers/bilibili
-
-# v0.2 起：预装可选依赖（manifest 里不写，见 §2.4）
-# uv 路径以镜像实际为准：官方镜像可用 /app/venv/bin/uv 或 PATH 中的 uv；
-# 若都不可用，跳过此行，setup flow 会降级为「手填 SESSDATA」
-RUN /app/venv/bin/uv pip install --no-cache segno==1.6.6
+COPY provider/bilibili /tmp/bilibili
+RUN PROVIDERS="$(/app/venv/bin/python -c \
+        'import music_assistant, os; print(os.path.join(os.path.dirname(music_assistant.__file__), "providers"))')" \
+    && mkdir -p "$PROVIDERS" \
+    && cp -r /tmp/bilibili "$PROVIDERS/bilibili" \
+    && rm -rf /tmp/bilibili \
+    && /app/venv/bin/uv pip install --no-cache segno==1.6.6
 ```
 
 ```yaml
-# docker/compose.override.yml
+# docker/compose.build.yml
 services:
-  music-assistant-server:
+  music-assistant:
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -694,6 +695,7 @@ services:
 - **不要覆盖 base image 的 ENTRYPOINT/CMD**；MA 需要 `--data-dir/--cache-dir`。
 - `MA_VERSION` **固定为 2.10.8**，不用 `latest`；升级时先看 §2.3 的差异表。（`ghcr.io/music-assistant/server:2.10.7` 与 `:2.10.8` 均已确认存在；两版 provider 接口一致，可互换）
 - 升级 MA 时重建镜像；provider 代码不变。
+- **实测（2.10.8）**：包实际位于 `/app/venv/lib/python3.14/site-packages/music_assistant`，因此 Dockerfile 用 `python -c` 动态定位，不硬编码。
 
 ### 8.3 裸机 / venv
 

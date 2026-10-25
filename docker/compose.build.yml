@@ -1,0 +1,13 @@
+services:
+  music-assistant:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: bilibili-ma
+    restart: unless-stopped
+    ports:
+      - "18096:8095"
+    environment:
+      LOG_LEVEL: info
+    volumes:
+      - ../.dev-data-build:/data

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Final
 
 _COOKIE_KEYS: Final = (
@@ -22,8 +22,8 @@ _COOKIE_KEYS: Final = (
 class BilibiliCredential:
     """The subset of Bilibili cookies needed for read-only, authenticated access."""
 
-    sessdata: str = ""
-    bili_jct: str = ""
+    sessdata: str = field(default="", repr=False)
+    bili_jct: str = field(default="", repr=False)
     dedeuserid: str = ""
     buvid3: str = ""
     buvid4: str = ""
@@ -39,7 +39,7 @@ class BilibiliCredential:
         """Return the numeric user id, or 0 when unknown."""
         try:
             return int(self.dedeuserid)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return 0
 
     def cookie_header(self) -> str:
@@ -79,17 +79,21 @@ class BilibiliCredential:
             return cls()
         try:
             data: dict[str, Any] = json.loads(raw)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return cls()
         if not isinstance(data, dict):
             return cls()
+        try:
+            saved_at = int(data.get("saved_at") or 0)
+        except TypeError, ValueError:
+            saved_at = 0
         return cls(
             sessdata=str(data.get("sessdata") or ""),
             bili_jct=str(data.get("bili_jct") or ""),
             dedeuserid=str(data.get("dedeuserid") or ""),
             buvid3=str(data.get("buvid3") or ""),
             buvid4=str(data.get("buvid4") or ""),
-            saved_at=int(data.get("saved_at") or 0),
+            saved_at=saved_at,
         )
 
     @classmethod

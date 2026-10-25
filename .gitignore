@@ -11,3 +11,7 @@ build/
 artifacts/*.log
 artifacts/*.json
 .DS_Store
+
+artifacts/token.txt
+.docker/
+.dev-data-build/

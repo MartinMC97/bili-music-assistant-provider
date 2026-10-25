@@ -419,7 +419,7 @@ MA 的歌词查找顺序是：**曲目自身 provider（若声明 `LYRICS`）→
 |---|---|---|---|---|
 | **A. 核心 PR** | 直接往 `music_assistant/server` 加 `providers/bilibili/` | 用户零配置、随版本升级、有 CI/评审 | 审核周期长；非官方 API + 版权敏感，**通过与否不确定** | 想长期维护、面向所有用户 |
 | **B. 独立插件包** | 打成 pip 包，注册 `music_assistant.provider` entry point，配合 [`music-assistant-plugin-manager`](https://github.com/TigreGotico/music-assistant-plugin-manager) 启动 | 不碰内核、迭代快、可先验证体验 | 用户要换启动方式/改 Dockerfile；依赖第三方补丁 | **推荐先走这条** |
-| **C. 目录挂载** | 把 provider 目录挂进容器 `/app/music_assistant/providers/bilibili` | 最简单，个人自用足够 | 镜像升级易丢；无版本管理 | 个人折腾/快速验证 |
+| **C. 目录挂载** | 把 provider 目录挂进容器 `<site-packages>/music_assistant/providers/bilibili`（2.10.8 为 `/app/venv/lib/python3.14/site-packages/...`） | 最简单，个人自用足够 | 镜像升级易丢；无版本管理 | 个人折腾/快速验证 |
 | **D. OpenSubsonic 桥** | 把 B 站逻辑做成一个 Subsonic 服务，MA 用现成 `opensubsonic` provider 接 | 完全不写 MA 代码，顺带获得资料库/歌单语义 | 要另写一个服务 + 实现一堆 Subsonic 端点；多一层进程；体验割裂 | 已有服务端框架时 |
 | **E. RSS/Podcast PoC** | 起个小服务，把歌单生成 RSS（enclosure 指向本地代理，代理补 Referer） | 半天到一天就能听到声 | 播客 UI、无音乐队列语义、无搜索 | 只想先验证「能不能播」 |
 

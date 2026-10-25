@@ -1,0 +1,20 @@
+{
+  "code": 0,
+  "data": {
+    "count": 2,
+    "list": [
+      {
+        "id": 123456,
+        "title": "我喜欢的音乐",
+        "media_count": 3,
+        "fav_state": 0
+      },
+      {
+        "id": 654321,
+        "title": "夜跑",
+        "media_count": 1,
+        "fav_state": 0
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+.git
+.dev-data
+.dev-data-build
+.docker
+artifacts
+docs
+tests
+**/__pycache__
+**/*.pyc
