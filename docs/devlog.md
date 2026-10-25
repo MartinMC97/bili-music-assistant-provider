@@ -41,3 +41,4 @@
 4. 真实 `dash.flac.audio` / `dolby.audio` 形态需大会员账号验证（单测已覆盖 dict/list 两种）。
 5. 上游 PR 的合规表述与 `stage: alpha` 需要再确认。
 | 23:58 | 交付 | commit `ecf8844`：44 files, +7843/-45；最终回归 `176 passed, 1 skipped`、ruff/format 通过 | 工作树干净；本地 dev 容器与 `bilibili-ma:2.10.8` 镜像可用 |
+| 07:25 | 排障 | 用户反馈访问不了；容器 Up 7h，本机/各网卡 200，日志无外部连接 | 判定请求未到主机；补映射 8095:8095，两个端口均可本地访问 |

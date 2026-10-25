@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     ports:
       - "18095:8095"
+      - "8095:8095"
     environment:
       LOG_LEVEL: debug
       PYTHONDONTWRITEBYTECODE: "1"

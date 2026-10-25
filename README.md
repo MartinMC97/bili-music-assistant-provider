@@ -38,6 +38,8 @@ artifacts/             # 智能体分工笔记与代码评审
 # 1. 起一个独立的 MA（端口 18095）
 docker compose -f docker/compose.dev.yml up -d
 
+# 访问 http://localhost:18095 或 http://localhost:8095
+
 # 2. 改代码后重启并看日志
 ./scripts/dev.sh
 
