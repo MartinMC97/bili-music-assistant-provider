@@ -1,0 +1,11 @@
+{
+  "type": "music",
+  "domain": "bilibili",
+  "stage": "alpha",
+  "name": "Bilibili",
+  "description": "Bilibili 视频音轨作为音乐源（非官方，只读）",
+  "codeowners": ["@local-dev"],
+  "requirements": [],
+  "documentation": "https://github.com/local/bilibili-ma-provider",
+  "multi_instance": true
+}

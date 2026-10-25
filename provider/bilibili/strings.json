@@ -1,0 +1,47 @@
+{
+  "config_entries": {
+    "quality": {
+      "label": "音质上限",
+      "description": "auto 会使用账号可用的最高档；登录且有大会员时才可能出现 FLAC/Dolby。"
+    },
+    "min_duration": {
+      "label": "最短时长（秒）",
+      "description": "过滤短视频、切片和预告。"
+    },
+    "max_duration": {
+      "label": "最长时长（秒）",
+      "description": "过滤一小时循环、直播回放和课程。"
+    },
+    "search_limit": {
+      "label": "搜索结果数量",
+      "description": "每次搜索最多返回多少条。"
+    },
+    "verify_stream_url": {
+      "label": "播放前探测 CDN",
+      "description": "用 1KB Range 请求检查首选 CDN，失败时切换到备份地址。"
+    },
+    "sessdata_manual": {
+      "label": "手动填写 SESSDATA",
+      "description": "扫码不可用时的兜底。只读收藏夹需要同时提供 SESSDATA 和 DedeUserID。"
+    }
+  },
+  "setup_flow": {
+    "choose": {
+      "title": "选择登录方式",
+      "description": "扫码登录可同步收藏夹；也可以先匿名使用，之后再配置。"
+    },
+    "manual": {
+      "title": "粘贴凭据",
+      "description": "从浏览器开发者工具复制 Cookie 中的 SESSDATA 和 DedeUserID。"
+    },
+    "scan_qr": {
+      "title": "扫码登录",
+      "description": "用 Bilibili App 扫描二维码并确认登录。",
+      "progress_text": "等待扫码确认…"
+    },
+    "expired": {
+      "title": "二维码已过期",
+      "description": "请重新获取二维码。"
+    }
+  }
+}

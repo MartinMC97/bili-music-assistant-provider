@@ -1,0 +1,13 @@
+services:
+  music-assistant:
+    image: ghcr.io/music-assistant/server:2.10.8
+    container_name: bilibili-ma-dev
+    restart: unless-stopped
+    ports:
+      - "18095:8095"
+    environment:
+      LOG_LEVEL: debug
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ../provider/bilibili:/app/music_assistant/providers/bilibili:ro
+      - ../.dev-data:/data
