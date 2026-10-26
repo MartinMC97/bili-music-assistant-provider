@@ -310,7 +310,7 @@ async def test_recommendation_items_rank_music() -> None:
     assert isinstance(items, UniqueList)
     assert len(items) == 5
     assert all(isinstance(item, Track) for item in items)
-    assert items[0].item_id == "BV1HV411m7DE#30437803635"
+    assert items[0].item_id == "BV1HV411m7DE"
     assert items[0].name.startswith("Lieder Ohne Worte")
     assert client.calls == [("music_rank", 30)]
 
@@ -348,7 +348,7 @@ async def test_recommendation_items_skip_failures_and_duplicates() -> None:
     items = await catalog.recommendation_items(client, PROVIDER, "rank_music")
 
     assert len(items) == 1
-    assert items[0].item_id == "BV1HV411m7DE#30437803635"
+    assert items[0].item_id == "BV1HV411m7DE"
 
 
 async def test_recommendation_items_unknown_row() -> None:
@@ -393,7 +393,7 @@ async def test_browse_rank_and_new() -> None:
 
     assert len(rank_items) == 5
     assert all(isinstance(item, Track) for item in rank_items)
-    assert rank_items[0].item_id == "BV1HV411m7DE#30437803635"
+    assert rank_items[0].item_id == "BV1HV411m7DE"
     assert len(new_items) == 5
     assert new_items[0].name == "AIYOU"
     assert [call[0] for call in client.calls] == ["music_rank", "new_music"]

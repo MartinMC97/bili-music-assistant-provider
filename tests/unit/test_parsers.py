@@ -333,12 +333,12 @@ def test_parse_fav_folder_without_id_raises() -> None:
 # music center
 # ---------------------------------------------------------------------------
 def test_parse_music_center_item() -> None:
-    """Music-center entries keep music metadata and embed the cid."""
+    """Music-center entries keep music metadata but not the metadata cid."""
     item = load_fixture("music_rank")["data"]["list"][0]
     track = parse_music_center_item(item, PROVIDER)
 
     assert isinstance(track, Track)
-    assert track.item_id == "BV1HV411m7DE#30437803635"
+    assert track.item_id == "BV1HV411m7DE"
     assert track.name == "Lieder Ohne Worte Op 67 No 4 la Fileuse(The Spinning Song)"
     assert track.duration == 105
     assert track.metadata.description == item["music_title"]
@@ -357,7 +357,23 @@ def test_parse_music_center_item() -> None:
         )
     }
     mapping = next(iter(track.provider_mappings))
-    assert mapping.item_id == "BV1HV411m7DE#30437803635"
+    assert mapping.item_id == "BV1HV411m7DE"
+
+
+def test_parse_music_center_item_ignores_metadata_cid() -> None:
+    """The music-centre cid is metadata, not a playable page cid."""
+    item = {
+        "bvid": "BV1UQK7zAEHK",
+        "aid": "114741846543559",
+        "cid": "40693796622",
+        "music_title": "再见",
+        "author": "张震岳",
+    }
+
+    track = parse_music_center_item(item, PROVIDER)
+
+    assert track is not None
+    assert track.item_id == "BV1UQK7zAEHK"
 
 
 def test_parse_music_center_item_related_archive_fallback() -> None:
@@ -368,7 +384,7 @@ def test_parse_music_center_item_related_archive_fallback() -> None:
     track = parse_music_center_item(item, PROVIDER)
 
     assert track is not None
-    assert track.item_id == "BV1Le411S7b1#238114795"
+    assert track.item_id == "BV1Le411S7b1"
     assert track.name == "MUGEN ROAD"
     assert track.duration == 113
     assert track.metadata.popularity == 13513453
@@ -381,7 +397,7 @@ def test_parse_music_center_item_related_archive_fallback() -> None:
 
 
 def test_parse_music_center_item_av_fallback() -> None:
-    """With only an aid the item id becomes ``av<aid>#<cid>``."""
+    """With only an aid the item id becomes ``av<aid>``."""
     item = {
         "music_title": "晴天",
         "aid": "12345",
@@ -393,7 +409,7 @@ def test_parse_music_center_item_av_fallback() -> None:
     track = parse_music_center_item(item, PROVIDER)
 
     assert track is not None
-    assert track.item_id == "av12345#999"
+    assert track.item_id == "av12345"
     assert track.duration == 0
     assert track.metadata.links == {
         MediaItemLink(

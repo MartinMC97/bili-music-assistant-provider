@@ -435,7 +435,13 @@ def parse_fav_folder(
 
 
 def parse_music_center_item(item: dict[str, Any], provider_instance: str) -> Track | None:
-    """Convert a music-center entry, falling back to its ``related_archive``."""
+    """Convert a music-center entry, falling back to its ``related_archive``.
+
+    The music-centre ``cid`` is a music metadata id, not the video page cid that
+    ``/x/player/playurl`` expects. Keep only the video id and let
+    :meth:`BilibiliProvider.get_stream_details` resolve the real cid from
+    ``/x/web-interface/view``.
+    """
     if not isinstance(item, dict):
         return None
 
@@ -444,30 +450,13 @@ def parse_music_center_item(item: dict[str, Any], provider_instance: str) -> Tra
     bvid = _text(item.get("bvid")) or _text(archive.get("bvid"))
     aid = _text(item.get("aid")) or _text(archive.get("aid"))
 
-    # A cid is only meaningful together with the video it belongs to: the
-    # top-level and the related archive are different videos, so never mix
-    # their ids (a bvid with a foreign cid breaks playback).
-    if _text(item.get("bvid")):
-        cid = _cid_value(item.get("cid"))
-    elif _text(archive.get("bvid")):
-        cid = _cid_value(archive.get("cid"))
-    else:
-        cid = (
-            _cid_value(item.get("cid"))
-            if _text(item.get("aid"))
-            else _cid_value(archive.get("cid"))
-        )
-
     raw_title = (
         _text(item.get("music_title")) or _text(item.get("title")) or _text(archive.get("title"))
     )
     if not raw_title or not (bvid or aid):
         return None
 
-    if bvid:
-        item_id = f"{bvid}#{cid}" if cid else bvid
-    else:
-        item_id = f"av{aid}#{cid}" if cid else f"av{aid}"
+    item_id = bvid if bvid else f"av{aid}"
 
     author = item.get("author") or archive.get("username")
     mid = item.get("mid") or archive.get("uid")
