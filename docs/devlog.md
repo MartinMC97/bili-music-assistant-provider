@@ -43,3 +43,5 @@
 | 23:58 | 交付 | commit `ecf8844`：44 files, +7843/-45；最终回归 `176 passed, 1 skipped`、ruff/format 通过 | 工作树干净；本地 dev 容器与 `bilibili-ma:2.10.8` 镜像可用 |
 | 07:25 | 排障 | 用户反馈访问不了；容器 Up 7h，本机/各网卡 200，日志无外部连接 | 判定请求未到主机；补映射 8095:8095，两个端口均可本地访问 |
 | 08:00 | 线上问题 | 用户登录后点“收藏夹”报 `ValueError: not enough values to unpack`；定位 `music/browse` 期望 `<instance>://<sub>`，但根 BrowseFolder 的 `path` 被写成裸 `favorites` | 修复：根 folder 用 `f"{instance}://{key}"`；真实账号验证收藏夹 3 个、默认收藏夹 188 首 |
+| 09:20 | 安装体验 | 新增 `docs/INSTALL.md`、`scripts/install_venv.py`、`uninstall_venv.py`、`install_docker.sh` | 干净容器实测 `install_docker.sh`：provider 落盘 + 重启成功；venv 脚本用假包目录验证安装/卸载 |
+| 09:24 | 文档 | README 增加“安装到自己的 MA”入口；INSTALL 覆盖 Docker 镜像/bind mount/venv/HAOS 限制 | 明确“不要 pip install provider”、真实包路径、segno 可选 |

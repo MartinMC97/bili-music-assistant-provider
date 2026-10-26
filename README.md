@@ -12,6 +12,25 @@
 - 匿名可用；登录后可同步收藏夹（只读）。
 - 单元测试：`176 passed, 1 skipped`；`ruff check` 通过。
 
+## 安装到自己的 Music Assistant
+
+完整步骤见 **[docs/INSTALL.md](docs/INSTALL.md)**。三种常用方式：
+
+```bash
+# A. 构建自带 provider 的镜像（推荐，持久）
+docker build -f docker/Dockerfile -t bilibili-ma:2.10.8 .
+# 然后把 compose 里的 image 换成 bilibili-ma:2.10.8
+
+# B. 快速塞进运行中的容器（重建会丢，适合先试）
+./scripts/install_docker.sh music-assistant
+
+# C. 裸机 / venv（用 MA 所在 venv 的 python）
+/path/to/ma-venv/bin/python scripts/install_venv.py
+```
+
+装完重启 MA，在 **Settings → Providers → Add Provider → Bilibili** 里扫码或填 SESSDATA 即可。
+HAOS Add-on 没有官方 provider 注入点，见 INSTALL.md 的方式 D。
+
 ## 能力
 
 - 搜索 B 站视频并映射为曲目（标题清洗、时长过滤、去重）

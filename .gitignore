@@ -15,3 +15,6 @@ artifacts/*.json
 artifacts/token.txt
 .docker/
 .dev-data-build/
+
+.dev-data-test*/
+.install-test/
