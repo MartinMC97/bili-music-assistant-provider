@@ -15,6 +15,7 @@ from bilibili.parsers import (
     parse_fav_folder,
     parse_fav_item,
     parse_music_center_item,
+    parse_page_track,
     parse_ranking_item,
     parse_search_item,
     parse_view,
@@ -249,6 +250,25 @@ def test_parse_view_multi_part_uses_cid() -> None:
     assert track.duration == 100
     mapping = next(iter(track.provider_mappings))
     assert mapping.item_id == "BV1GJ411x7h7#111"
+
+
+def test_parse_page_track_uses_page_metadata() -> None:
+    """Each page gets its own cid, title, duration and P number."""
+    data = load_fixture("view")["data"]
+    data["pages"] = [
+        {"cid": 111, "page": 1, "part": "Part One", "duration": 100},
+        {"cid": 222, "page": 2, "part": "Part Two", "duration": 90},
+    ]
+    base = parse_view(data, PROVIDER)
+
+    track = parse_page_track(data, data["pages"][1], base, PROVIDER)
+
+    assert track is not None
+    assert track.item_id == "BV1GJ411x7h7#222"
+    assert track.name == "Part Two"
+    assert track.duration == 90
+    assert track.track_number == 2
+    assert next(iter(track.provider_mappings)).item_id == "BV1GJ411x7h7#222"
 
 
 def test_parse_view_aid_only() -> None:

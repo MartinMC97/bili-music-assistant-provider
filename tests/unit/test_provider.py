@@ -509,6 +509,64 @@ async def test_search_filters_dedupes_sorts_and_truncates() -> None:
     assert client.calls[0][1:] == ("周杰伦", 1, 20)
 
 
+async def test_search_by_bvid_returns_every_page() -> None:
+    """A direct BV lookup skips keyword search and returns all pages."""
+    view_data = {
+        "bvid": "BV1AWTY6HEPr",
+        "aid": 1,
+        "title": "FGO OST 8",
+        "pic": "//i0.hdslb.com/bfs/archive/cover.jpg",
+        "duration": 300,
+        "pubdate": 1,
+        "owner": {"mid": 42, "name": "UP"},
+        "stat": {"view": 10},
+        "pages": [
+            {"cid": 111, "page": 1, "part": "【Disc1】01. Ground", "duration": 180},
+            {"cid": 222, "page": 2, "part": "02. Proof", "duration": 154},
+        ],
+    }
+    client = FakeClient(view_data=view_data)
+    provider, _ = await make_provider(client=client)
+
+    result = await provider.search("BV1AWTY6HEPr", [MediaType.TRACK], limit=5)
+
+    assert [track.item_id for track in result.tracks] == [
+        "BV1AWTY6HEPr#111",
+        "BV1AWTY6HEPr#222",
+    ]
+    assert result.tracks[0].name == "【Disc1】01. Ground"
+    assert result.tracks[0].track_number == 1
+
+
+async def test_search_expands_multipart_video() -> None:
+    """A multi-part search hit becomes one track per page."""
+    view_data = {
+        "bvid": "BV1",
+        "aid": 1,
+        "title": "FGO OST Collection",
+        "pic": "//i0.hdslb.com/bfs/archive/cover.jpg",
+        "duration": 300,
+        "pubdate": 1,
+        "owner": {"mid": 42, "name": "UP"},
+        "stat": {"view": 10},
+        "pages": [
+            {"cid": 111, "page": 1, "part": "Disc 1 - Track 1", "duration": 100},
+            {"cid": 222, "page": 2, "part": "Disc 1 - Track 2", "duration": 200},
+        ],
+    }
+    client = FakeClient(
+        search_items=[search_item("BV1", "FGO OST Collection", "UP", "190:22", 100)],
+        view_data=view_data,
+    )
+    provider, _ = await make_provider(client=client)
+
+    result = await provider.search("FGO OST", [MediaType.TRACK], limit=10)
+
+    assert [track.item_id for track in result.tracks] == ["BV1#111", "BV1#222"]
+    assert [track.name for track in result.tracks] == ["Disc 1 - Track 1", "Disc 1 - Track 2"]
+    assert [track.track_number for track in result.tracks] == [1, 2]
+
+
 async def test_search_honours_search_limit_config() -> None:
     """search_limit caps the number of results even for a larger MA limit."""
     client = FakeClient(

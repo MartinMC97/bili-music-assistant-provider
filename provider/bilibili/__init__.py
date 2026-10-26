@@ -10,6 +10,8 @@ them into the Music Assistant provider API.
 
 from __future__ import annotations
 
+import asyncio
+import re
 import time
 from collections.abc import AsyncGenerator, Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Final
@@ -65,6 +67,9 @@ SUPPORTED_FEATURES = {
     ProviderFeature.RECOMMENDATIONS,
     ProviderFeature.BROWSE,
 }
+
+#: Bilibili video id: ``BV`` + 10 case-sensitive characters.
+_BVID_RE: Final = re.compile(r"BV[0-9A-Za-z]{10}")
 
 #: Human readable titles for the quality select; values come from constants.
 _QUALITY_TITLES: Final = {
@@ -628,6 +633,47 @@ class BilibiliProvider(MusicProvider):
             raise UnplayableMediaError(f"Bilibili video {video_id} has no playable page")
         return cid
 
+    async def _expand_multipart_tracks(self, tracks: Sequence[Track]) -> list[Track]:
+        """Expand multi-part videos into one Track per page.
+
+        A list API does not expose the page count, so each video needs one
+        ``view`` call. The view cache (24h) makes subsequent browses cheap;
+        a small semaphore avoids hammering Bilibili on large favorite folders.
+        """
+        if not tracks:
+            return []
+
+        semaphore = asyncio.Semaphore(4)
+
+        async def expand(track: Track) -> list[Track]:
+            raw = str(track.item_id or "").strip()
+            try:
+                base, cid = self._split_track_id(raw)
+            except MediaNotFoundError:
+                return [track]
+            if cid is not None:
+                return [track]
+            try:
+                async with semaphore:
+                    data = await self._view(base)
+            except (BiliApiError, MusicAssistantError) as err:
+                self.logger.debug("Could not expand multi-part video %s: %s", raw, err)
+                return [track]
+            pages = data.get("pages")
+            if not isinstance(pages, list) or len(pages) <= 1:
+                return [track]
+            expanded = [
+                page_track
+                for page in pages
+                if isinstance(page, dict)
+                if (page_track := parsers.parse_page_track(data, page, track, self.instance_id))
+                is not None
+            ]
+            return expanded or [track]
+
+        groups = await asyncio.gather(*(expand(track) for track in tracks))
+        return [track for group in groups for track in group]
+
     def _remember_artist_names(self, items: Iterable[Any]) -> None:
         """Remember UP-owner ids/names so get_artist can answer from memory."""
         for item in items:
@@ -707,12 +753,33 @@ class BilibiliProvider(MusicProvider):
         limit: int = 5,
     ) -> SearchResults:
         """Search Bilibili videos for the track media type."""
+        query = str(search_query or "").strip()
         if MediaType.TRACK not in media_types:
             return SearchResults()
-
-        query = str(search_query or "").strip()
         if not query:
             return SearchResults()
+
+        if _BVID_RE.fullmatch(query):
+            try:
+                data = await self._view(query)
+                base = parsers.parse_view(data, self.instance_id)
+            except ValueError as err:
+                raise MediaNotFoundError(f"Bilibili video {query} has no usable metadata") from err
+            pages = data.get("pages")
+            if isinstance(pages, list) and len(pages) > 1:
+                tracks = [
+                    page_track
+                    for page in pages
+                    if isinstance(page, dict)
+                    if (page_track := parsers.parse_page_track(
+                        data, page, base, self.instance_id
+                    ))
+                    is not None
+                ]
+            else:
+                tracks = [base]
+            self._remember_artist_names(tracks)
+            return SearchResults(tracks=tracks)
 
         search_cap = self._config_int(constants.CONF_SEARCH_LIMIT, constants.DEFAULT_SEARCH_LIMIT)
         if search_cap <= 0:
@@ -731,14 +798,17 @@ class BilibiliProvider(MusicProvider):
         tracks: list[Track] = []
         for item in items or ():
             track = parsers.parse_search_item(item, self.instance_id)
-            if track is None:
-                continue
-            if not self._duration_allowed(track.duration):
-                continue
-            tracks.append(track)
+            if track is not None:
+                tracks.append(track)
 
         tracks = self._dedupe_tracks(tracks)
         tracks.sort(key=_popularity, reverse=True)
+        tracks = await self._expand_multipart_tracks(tracks)
+        tracks = [
+            track
+            for track in tracks
+            if track.track_number > 0 or self._duration_allowed(track.duration)
+        ]
         tracks = tracks[:wanted]
         self._remember_artist_names(tracks)
         return SearchResults(tracks=tracks)
@@ -954,6 +1024,7 @@ class BilibiliProvider(MusicProvider):
                 if self._handle_auth_error(client, err):
                     return []
                 raise self._translate_error(err) from err
+            all_tracks = await self._expand_multipart_tracks(all_tracks)
             self._fav_tracks_cache[prov_playlist_id] = (
                 now + constants.FAVORITES_CACHE_TTL,
                 all_tracks,
@@ -981,6 +1052,8 @@ class BilibiliProvider(MusicProvider):
             )
         except BiliApiError as err:
             raise self._translate_error(err) from err
+        if items and all(isinstance(item, Track) for item in items):
+            items = UniqueList(await self._expand_multipart_tracks(items))
         self._remember_artist_names(items)
         return items
 
@@ -990,5 +1063,7 @@ class BilibiliProvider(MusicProvider):
             items = await catalog.browse_items(self._require_client(), self.instance_id, path)
         except BiliApiError as err:
             raise self._translate_error(err) from err
+        if items and all(isinstance(item, Track) for item in items):
+            items = UniqueList(await self._expand_multipart_tracks(items))
         self._remember_artist_names(items)
         return items

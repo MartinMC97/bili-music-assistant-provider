@@ -293,6 +293,54 @@ def _build_track(
     )
 
 
+def parse_page_track(
+    data: dict[str, Any],
+    page: dict[str, Any],
+    base: Track,
+    provider_instance: str,
+) -> Track | None:
+    """Convert one ``pages`` entry of a multi-part video into a Track.
+
+    ``base`` supplies the fields shared by all parts (artist, cover, popularity);
+    the page supplies its own cid, title and duration.
+    """
+    cid = _cid_value(page.get("cid"))
+    bvid = _text(data.get("bvid"))
+    aid = data.get("aid")
+    if not cid or not (bvid or aid):
+        return None
+
+    item_id = f"{bvid}#{cid}" if bvid else f"av{_text(aid)}#{cid}"
+    page_number = _as_int(page.get("page")) or 0
+    part = _text(page.get("part"))
+    raw_title = part or (f"{base.name} P{page_number}" if page_number else base.name)
+    artist = base.artists[0] if base.artists else None
+    image = base.metadata.images[0] if base.metadata.images else None
+
+    track = _build_track(
+        item_id=item_id,
+        provider_instance=provider_instance,
+        raw_title=raw_title,
+        duration=page.get("duration") or base.duration,
+        author=getattr(artist, "name", None),
+        mid=getattr(artist, "item_id", None),
+        cover=image.path if image is not None else None,
+        popularity=base.metadata.popularity,
+        bvid=bvid,
+        aid=aid,
+        pubdate=data.get("pubdate"),
+    )
+    if part:
+        # Page titles are already human-facing; keep 【Disc1】 labels intact
+        # instead of running the aggressive search-result cleaner over them.
+        track.name = part
+    if page_number:
+        track.track_number = page_number
+    if base.date_added is not None:
+        track.date_added = base.date_added
+    return track
+
+
 def _parse_video_item(item: dict[str, Any], provider_instance: str) -> Track | None:
     """Shared parser for search results and ranking entries."""
     bvid = _text(item.get("bvid"))
