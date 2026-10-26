@@ -113,6 +113,14 @@ docker pull ghcr.io/martinmc97/music-assistant:2.10.8-bili
 - 之后：稳定 1 周后再打 PyPI 包 + `music-assistant-plugin-manager`（见 `docs/implementation-plan.md` M8）。
 - HAOS add-on：MA 只从包内 `providers/` 发现 provider，**没有官方注入点**；要全覆盖只能上游合并。
 
+## 参考与致谢
+
+- [**HanversionOvO/BiliMusic**](https://github.com/HanversionOvO/BiliMusic)：B 站接口行为、WBI 签名/扫码登录流程、DASH 音轨选择、标题清洗与噪声词思路的参考。BiliMusic 是 TypeScript/Electron 客户端；本仓库的 provider 是用 Python 按 Music Assistant 接口重写的，**没有复制它的 Electron/React 代码**。
+- [**music-assistant/server**](https://github.com/music-assistant/server)：provider API、`StreamDetails` 与流式播放模型。
+- **Bilibili 公开 Web API**：视频/音频接口路径与播放协议。
+
+> BiliMusic 仓库当前没有 `LICENSE` 文件。这里仅作接口行为与算法思路参考，未包含其源代码；如果上游后续补充许可证，或你认为某段实现与它过于接近，请开 issue，我们会调整或重写。
+
 ## License
 
 [Apache-2.0](LICENSE)。版权与归属见 [NOTICE](NOTICE)。

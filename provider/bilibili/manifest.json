@@ -9,5 +9,9 @@
   ],
   "requirements": [],
   "documentation": "https://github.com/MartinMC97/bili-music-assistant-provider",
-  "multi_instance": true
+  "multi_instance": true,
+  "credits": [
+    "[BiliMusic](https://github.com/HanversionOvO/BiliMusic) — interface behavior and title-cleaning reference",
+    "[Music Assistant](https://github.com/music-assistant/server) — provider API"
+  ]
 }
