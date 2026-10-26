@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Any, ClassVar
 
 import pytest
-from bilibili import BilibiliProvider, constants, setup
+from bilibili import BilibiliProvider, constants, parsers, setup
 from bilibili.auth import BilibiliCredential
 from bilibili.client import BiliApiError
 from music_assistant.constants import CONF_ENTRY_UNOFFICIAL_PROVIDER
@@ -284,10 +284,11 @@ async def test_config_entries_match_contract() -> None:
     entries = await provider.get_config_entries()
     by_key = {entry.key: entry for entry in entries}
 
-    assert [entry.key for entry in entries[:5]] == [
+    assert [entry.key for entry in entries[:6]] == [
         constants.CONF_QUALITY,
         constants.CONF_MIN_DURATION,
         constants.CONF_MAX_DURATION,
+        constants.CONF_FAVORITES_MUSIC_ONLY,
         constants.CONF_SEARCH_LIMIT,
         constants.CONF_VERIFY_STREAM_URL,
     ]
@@ -297,6 +298,7 @@ async def test_config_entries_match_contract() -> None:
 
     assert by_key[constants.CONF_MIN_DURATION].default_value == constants.DEFAULT_MIN_DURATION
     assert by_key[constants.CONF_MAX_DURATION].default_value == constants.DEFAULT_MAX_DURATION
+    assert by_key[constants.CONF_FAVORITES_MUSIC_ONLY].default_value is True
     assert by_key[constants.CONF_SEARCH_LIMIT].default_value == constants.DEFAULT_SEARCH_LIMIT
     assert by_key[constants.CONF_VERIFY_STREAM_URL].default_value is True
 
@@ -507,6 +509,30 @@ async def test_search_filters_dedupes_sorts_and_truncates() -> None:
     assert client.calls[0][0] == "search"
     # The provider asks for enough raw results to survive filtering/dedupe.
     assert client.calls[0][1:] == ("周杰伦", 1, 20)
+
+
+async def test_favorites_music_filter_drops_non_music_video() -> None:
+    """The favorites filter drops videos outside the music zones."""
+    client = FakeClient(
+        view_data={
+            "bvid": "BV1",
+            "aid": 1,
+            "title": "非音乐内容",
+            "duration": 300,
+            "tid": 17,
+            "pages": [
+                {"cid": 111, "page": 1, "part": "P1", "duration": 100},
+                {"cid": 222, "page": 2, "part": "P2", "duration": 200},
+            ],
+            "owner": {"mid": 42, "name": "UP"},
+            "stat": {"view": 10},
+        }
+    )
+    provider, _ = await make_provider(client=client)
+    track = parsers.parse_search_item(search_item("BV1", "非音乐内容", "UP", 300, 10), PROVIDER)
+
+    assert track is not None
+    assert await provider._expand_multipart_tracks([track], music_only=True) == []
 
 
 async def test_search_by_bvid_returns_every_page() -> None:

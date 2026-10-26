@@ -27,6 +27,26 @@ CONF_MAX_DURATION: Final = "max_duration"
 CONF_SEARCH_LIMIT: Final = "search_limit"
 CONF_VERIFY_STREAM_URL: Final = "verify_stream_url"
 CONF_SESSDATA_MANUAL: Final = "sessdata_manual"
+CONF_FAVORITES_MUSIC_ONLY: Final = "favorites_music_only"
+
+#: Bilibili music-zone tids (main zone + second-level zones).
+MUSIC_TIDS: Final = frozenset(
+    {
+        3,    # 音乐
+        28,   # 原创音乐
+        29,   # 音乐现场
+        30,   # VOCALOID·UTAU
+        31,   # 翻唱
+        59,   # 演奏
+        130,  # 音乐综合
+        193,  # MV
+        243,  # 乐评盘点
+        244,  # 音乐教学
+        265,  # AI 音乐
+        266,  # 音乐粉丝饭拍
+        267,  # 电台
+    }
+)
 CONF_CREDENTIAL_JSON: Final = "credential_json"
 
 QUALITY_AUTO: Final = "auto"

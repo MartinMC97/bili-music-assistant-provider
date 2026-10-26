@@ -12,6 +12,10 @@
       "label": "最长时长（秒）",
       "description": "过滤一小时循环、直播回放和课程。"
     },
+    "favorites_music_only": {
+      "label": "收藏夹只显示音乐分区",
+      "description": "按 B 站分区过滤收藏夹；音乐综合、OST、翻唱、演奏、MV、电台等会保留，游戏/生活/影视等会隐藏。"
+    },
     "search_limit": {
       "label": "搜索结果数量",
       "description": "每次搜索最多返回多少条。"

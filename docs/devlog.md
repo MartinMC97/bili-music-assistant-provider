@@ -56,3 +56,4 @@
 | 18:55 | CI | 去掉 `workflow_dispatch` 里写死的 2.10.8 默认值，留空回退到仓库变量 `MA_VERSION`；设置仓库变量 `MA_VERSION=2.10.8` | 手动触发不再覆盖变量；tag 仍为 `<版本>-bili-<commit>` |
 | 18:47 | CI | 手动触发 `40309889791` 成功（2m8s）；新 tag 规则生效：`2.10.8-bili-39896f7`，另有 `main` / `latest` / `sha-39896f7` | digest `sha256:16327bf7891233d4ed86eb2cf6bddb80ec86164a365e0b75b5cd23ffd0c6adf1`；amd64+arm64 校验通过 |
 | 19:30 | 分支 | `feat/expand-multipart-tracks`：多 P 展开为多个 Track；搜索/收藏夹/榜单共用 `_expand_multipart_tracks`；支持 BVID 直达；P 标题保留 `【Disc1】` | dev 容器搜索 `BV1MthAzSEyS` 返回 100 个 Track；单测 180 passed；截图在本地 `.screenshot/out/fgo-expanded.png` |
+| 19:40 | 分支 | 收藏夹增加“只显示音乐分区”开关（默认开），按 `view.tid` 白名单过滤非音乐收藏；FGO OST tid=130/267 保留 | 解决收藏夹多 P 展开后非音乐内容过多 |

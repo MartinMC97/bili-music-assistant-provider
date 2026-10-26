@@ -515,6 +515,12 @@ class BilibiliProvider(MusicProvider):
                 range=(0, 36000),
             ),
             ConfigEntry(
+                key=constants.CONF_FAVORITES_MUSIC_ONLY,
+                type=ConfigEntryType.BOOLEAN,
+                default_value=True,
+                required=False,
+            ),
+            ConfigEntry(
                 key=constants.CONF_SEARCH_LIMIT,
                 type=ConfigEntryType.INTEGER,
                 default_value=constants.DEFAULT_SEARCH_LIMIT,
@@ -633,7 +639,9 @@ class BilibiliProvider(MusicProvider):
             raise UnplayableMediaError(f"Bilibili video {video_id} has no playable page")
         return cid
 
-    async def _expand_multipart_tracks(self, tracks: Sequence[Track]) -> list[Track]:
+    async def _expand_multipart_tracks(
+        self, tracks: Sequence[Track], *, music_only: bool = False
+    ) -> list[Track]:
         """Expand multi-part videos into one Track per page.
 
         A list API does not expose the page count, so each video needs one
@@ -659,6 +667,10 @@ class BilibiliProvider(MusicProvider):
             except (BiliApiError, MusicAssistantError) as err:
                 self.logger.debug("Could not expand multi-part video %s: %s", raw, err)
                 return [track]
+            if music_only:
+                tid = _as_int(data.get("tid"), 0)
+                if tid and tid not in constants.MUSIC_TIDS:
+                    return []
             pages = data.get("pages")
             if not isinstance(pages, list) or len(pages) <= 1:
                 return [track]
@@ -1024,7 +1036,10 @@ class BilibiliProvider(MusicProvider):
                 if self._handle_auth_error(client, err):
                     return []
                 raise self._translate_error(err) from err
-            all_tracks = await self._expand_multipart_tracks(all_tracks)
+            all_tracks = await self._expand_multipart_tracks(
+                all_tracks,
+                music_only=self._config_bool(constants.CONF_FAVORITES_MUSIC_ONLY, True),
+            )
             self._fav_tracks_cache[prov_playlist_id] = (
                 now + constants.FAVORITES_CACHE_TTL,
                 all_tracks,

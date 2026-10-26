@@ -122,6 +122,8 @@ docker pull ghcr.io/martinmc97/music-assistant:2.10.8-bili-<commit>
 
 搜索框也可以直接输入 12 位 BVID（例如 `BV1MthAzSEyS`），会跳过关键词搜索、直接返回该视频的所有 P。
 
+收藏夹默认只保留 B 站音乐分区（音乐综合、OST、翻唱、演奏、MV、电台等），避免游戏/生活/影视等非音乐收藏混进来；可在 provider 配置里关闭“收藏夹只显示音乐分区”。
+
 ## 参考与致谢
 
 - [**HanversionOvO/BiliMusic**](https://github.com/HanversionOvO/BiliMusic)：B 站接口行为、WBI 签名/扫码登录流程、DASH 音轨选择、标题清洗与噪声词思路的参考。BiliMusic 是 TypeScript/Electron 客户端；本仓库的 provider 是用 Python 按 Music Assistant 接口重写的，**没有复制它的 Electron/React 代码**。
