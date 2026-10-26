@@ -33,6 +33,16 @@
 | 测试 fixture 中的 CDN 签名 URL | 已替换为 `cdn.example.invalid` / `backup.example.invalid` |
 | Docker/安装脚本 | 只有占位路径和容器名，无凭证 |
 
+## 本地开发数据（不在 git 里，但别打包分享）
+
+`.dev-data/` 是本地 MA 的数据目录（约 53MB），里面有：
+
+- `auth.db`：MA 用户、token 哈希；
+- provider 的 `setup_data`：B 站登录凭据（由 MA 加密，但仍是敏感数据）；
+- `webrtc_private_key.pem` / `webrtc_certificate.pem`。
+
+它被 `.gitignore` / `.dockerignore` 排除，**不会进 git**；但如果你把整个目录打成 zip 分享，记得先删掉 `.dev-data/`、`.dev-data-build/`、`.dev-data-test*/`。仓库另外忽略了 `.env`、`*.pem`、`*.key` 作为兜底。
+
 ## 运行时安全现状
 
 - B 站凭据只存在 MA 的 `setup_data`，由 MA 加密落盘；手填 SESSDATA 使用 `SECURE_STRING`。

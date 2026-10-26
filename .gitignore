@@ -18,3 +18,7 @@ artifacts/token.txt
 
 .dev-data-test*/
 .install-test/
+.env
+.env.*
+*.pem
+*.key
