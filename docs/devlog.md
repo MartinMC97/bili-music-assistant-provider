@@ -49,3 +49,4 @@
 | 10:00 | 许可证 | 添加 Apache-2.0 `LICENSE` + `NOTICE`；`pyproject.toml` 增加 license/authors/urls；README 增加 License 段 | 与 MA 核心同协议，便于后续 upstream |
 | 15:30 | CI | 新增 `.github/workflows/docker-publish.yml`：push main/tag/PR 触发，buildx 多架构推 GHCR | 首次 run `40285453478` 成功（4m22s），推送 `main` / `latest` / `sha-4cb9c12`，digest `sha256:3b0d…` |
 | 15:36 | CI | 增加发布后 `docker buildx imagetools inspect` 校验 amd64/arm64；补充 GHCR 拉取文档 | 第二次 run `40286074884` 成功，manifest 校验 amd64/arm64 通过；随后加 paths-ignore/手动输入 |
+| 15:38 | CI | 第三次 run `40286588998` 成功（3m15s），manifest 校验 amd64/arm64 通过；最终 tags `main` / `latest` / `sha-4bf4090`，digest `sha256:96928a9f2925f8d91445070cb7d7542c137232a5726f9214483da644e05d1a17` | paths-ignore 生效，后续 docs-only 不再触发构建 |
