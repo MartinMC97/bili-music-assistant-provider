@@ -18,8 +18,8 @@
 
 ```bash
 # A. 构建自带 provider 的镜像（推荐，持久）
-docker build -f docker/Dockerfile -t bilibili-ma:2.10.8 .
-# 然后把 compose 里的 image 换成 bilibili-ma:2.10.8
+docker build -f docker/Dockerfile -t music-assistant:2.10.8-bili .
+# 然后把 compose 里的 image 换成 music-assistant:2.10.8-bili
 
 # B. 快速塞进运行中的容器（重建会丢，适合先试）
 ./scripts/install_docker.sh music-assistant
@@ -79,7 +79,7 @@ docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_strea
 ## 构建自带 provider 的镜像
 
 ```bash
-docker build -f docker/Dockerfile -t bilibili-ma:2.10.8 .
+docker build -f docker/Dockerfile -t music-assistant:2.10.8-bili .
 docker compose -f docker/compose.build.yml up -d
 ```
 
@@ -90,18 +90,19 @@ docker compose -f docker/compose.build.yml up -d
 推 `main` 或 `v*` tag 时，GitHub Actions 会自动构建并推送：
 
 ```text
-ghcr.io/martinmc97/bili-music-assistant-provider
+ghcr.io/martinmc97/music-assistant
 ```
 
 - 平台：`linux/amd64`、`linux/arm64`
-- 标签：`latest`（main）、`main`、`sha-<short>`；tag `v0.1.0` 额外生成 `0.1.0`、`0.1`
-- 基础 MA 版本由仓库变量 `MA_VERSION` 控制，默认 `2.10.8`
+- 标签：`2.10.8-bili`（main，MA 2.10.8 + Bilibili provider）、`latest`（main）、`main`、`sha-<short>`；tag `v0.1.0` 额外生成 `0.1.0`、`0.1`
+- 基础 MA 版本由仓库变量 `MA_VERSION` 控制，默认 `2.10.8`；改版本后会自动生成对应的 `<version>-bili` 标签
+- 旧镜像名 `ghcr.io/martinmc97/bili-music-assistant-provider` 不再更新
 
 包默认继承仓库可见性（private）。拉取前登录：
 
 ```bash
 echo "$CR_PAT" | docker login ghcr.io -u MartinMC97 --password-stdin
-docker pull ghcr.io/martinmc97/bili-music-assistant-provider:latest
+docker pull ghcr.io/martinmc97/music-assistant:2.10.8-bili
 ```
 
 如果想让别人免登录拉取，在 GitHub → **Packages** → 该镜像 → Package settings 里把可见性改成 public。

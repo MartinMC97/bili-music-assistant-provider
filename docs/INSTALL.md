@@ -33,10 +33,12 @@ MA 发现 provider 的规则是：**只扫描 `music_assistant/providers/<domain
 ```bash
 # 需要 read:packages 权限的 GitHub token
 echo "$CR_PAT" | docker login ghcr.io -u MartinMC97 --password-stdin
-docker pull ghcr.io/martinmc97/bili-music-assistant-provider:latest
+docker pull ghcr.io/martinmc97/music-assistant:2.10.8-bili
 ```
 
-标签：`latest`（main 最新）、`main`、`sha-<commit>`；打 `v0.1.0` tag 时会生成 `0.1.0` / `0.1`。想免登录拉取，在 GitHub 的 Packages 设置里把包改为 public。
+标签：`2.10.8-bili`（MA 2.10.8 + provider）、`latest`（main 最新）、`main`、`sha-<commit>`；打 `v0.1.0` tag 时会生成 `0.1.0` / `0.1`。想免登录拉取，在 GitHub 的 Packages 设置里把包改为 public。
+
+旧镜像名 `ghcr.io/martinmc97/bili-music-assistant-provider` 已停止更新。
 
 ```bash
 git clone https://github.com/MartinMC97/bili-music-assistant-provider.git bilibili-ma-provider
@@ -45,7 +47,7 @@ cd bilibili-ma-provider
 # 默认基于 2.10.8；如果自己的 MA 是 2.10.7，把 build-arg 改成 2.10.7
 docker build -f docker/Dockerfile \
   --build-arg MA_VERSION=2.10.8 \
-  -t bilibili-ma:2.10.8 .
+  -t music-assistant:2.10.8-bili .
 ```
 
 然后把你现有 compose 里的 `image:` 换掉（**其它配置保持不动**）：
@@ -53,7 +55,7 @@ docker build -f docker/Dockerfile \
 ```yaml
 services:
   music-assistant:
-    image: bilibili-ma:2.10.8
+    image: music-assistant:2.10.8-bili
     # 原来的 ports / volumes / environment / network_mode 都保留
 ```
 
@@ -67,7 +69,7 @@ docker compose up -d
 docker run -d --name music-assistant \
   -p 8095:8095 \
   -v /path/to/ma-data:/data \
-  bilibili-ma:2.10.8
+  music-assistant:2.10.8-bili
 ```
 
 这个镜像会：

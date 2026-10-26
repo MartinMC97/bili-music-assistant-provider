@@ -29,7 +29,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository_owner }}/music-assistant
 
 permissions:
   contents: read
@@ -64,6 +64,13 @@ jobs:
           # Docker image references must be lowercase; GitHub logins are not.
           echo "name=${REGISTRY}/${IMAGE_NAME,,}" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve MA version
+        id: version
+        shell: bash
+        env:
+          REQUESTED_MA_VERSION: ${{ inputs.ma_version || vars.MA_VERSION || '2.10.8' }}
+        run: echo "ma_version=${REQUESTED_MA_VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -78,6 +85,7 @@ jobs:
         with:
           images: ${{ steps.image.outputs.name }}
           tags: |
+            type=raw,value=${{ steps.version.outputs.ma_version }}-bili,enable={{is_default_branch}}
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
@@ -85,7 +93,8 @@ jobs:
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
           labels: |
-            org.opencontainers.image.title=bilibili-ma-provider
+            org.opencontainers.image.title=music-assistant-bili
+            org.opencontainers.image.base.name=ghcr.io/music-assistant/server:${{ steps.version.outputs.ma_version }}
             org.opencontainers.image.description=Bilibili video audio provider for Music Assistant (unofficial)
             org.opencontainers.image.licenses=Apache-2.0
 
@@ -99,7 +108,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            MA_VERSION=${{ inputs.ma_version || vars.MA_VERSION || '2.10.8' }}
+            MA_VERSION=${{ steps.version.outputs.ma_version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: ${{ github.event_name != 'pull_request' }}
@@ -121,6 +130,7 @@ jobs:
             echo "### Container image"
             echo ""
             echo "- Registry: \`${{ steps.image.outputs.name }}\`"
+            echo "- MA base: \`${{ steps.version.outputs.ma_version }}\`"
             echo "- Platforms: \`${{ github.event_name == 'pull_request' && 'linux/amd64' || matrix.platforms }}\`"
             echo "- Pushed: \`${{ github.event_name != 'pull_request' }}\`"
             echo ""
