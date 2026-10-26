@@ -85,6 +85,27 @@ docker compose -f docker/compose.build.yml up -d
 
 镜像里预装 `segno==1.6.6`（二维码登录用）；stock 镜像没有它，setup flow 会自动降级为手填 SESSDATA。
 
+## 预构建镜像（GHCR）
+
+推 `main` 或 `v*` tag 时，GitHub Actions 会自动构建并推送：
+
+```text
+ghcr.io/martinmc97/bili-music-assistant-provider
+```
+
+- 平台：`linux/amd64`、`linux/arm64`
+- 标签：`latest`（main）、`main`、`sha-<short>`；tag `v0.1.0` 额外生成 `0.1.0`、`0.1`
+- 基础 MA 版本由仓库变量 `MA_VERSION` 控制，默认 `2.10.8`
+
+包默认继承仓库可见性（private）。拉取前登录：
+
+```bash
+echo "$CR_PAT" | docker login ghcr.io -u MartinMC97 --password-stdin
+docker pull ghcr.io/martinmc97/bili-music-assistant-provider:latest
+```
+
+如果想让别人免登录拉取，在 GitHub → **Packages** → 该镜像 → Package settings 里把可见性改成 public。
+
 ## 分发状态
 
 - 当前：本地 Docker / bind mount / venv 脚本。

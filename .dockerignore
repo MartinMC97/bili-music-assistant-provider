@@ -7,3 +7,4 @@ docs
 tests
 **/__pycache__
 **/*.pyc
+.github
