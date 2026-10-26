@@ -28,6 +28,16 @@ MA 发现 provider 的规则是：**只扫描 `music_assistant/providers/<domain
 
 适合长期使用，MA 重建/升级后仍然保留。
 
+**也可以直接用 GHCR 上由 GitHub Actions 构建好的镜像**（包默认 private）：
+
+```bash
+# 需要 read:packages 权限的 GitHub token
+echo "$CR_PAT" | docker login ghcr.io -u MartinMC97 --password-stdin
+docker pull ghcr.io/martinmc97/bili-music-assistant-provider:latest
+```
+
+标签：`latest`（main 最新）、`main`、`sha-<commit>`；打 `v0.1.0` tag 时会生成 `0.1.0` / `0.1`。想免登录拉取，在 GitHub 的 Packages 设置里把包改为 public。
+
 ```bash
 git clone https://github.com/MartinMC97/bili-music-assistant-provider.git bilibili-ma-provider
 cd bilibili-ma-provider

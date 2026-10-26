@@ -90,6 +90,16 @@ jobs:
           provenance: ${{ github.event_name != 'pull_request' }}
           sbom: ${{ github.event_name != 'pull_request' }}
 
+      - name: Verify published manifest
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          IMAGE_REF="$(printf '%s\n' "${{ steps.meta.outputs.tags }}" | head -n1)"
+          echo "Inspecting ${IMAGE_REF}"
+          docker buildx imagetools inspect "${IMAGE_REF}" | tee /tmp/manifest.txt
+          grep -q "linux/amd64" /tmp/manifest.txt
+          grep -q "linux/arm64" /tmp/manifest.txt
+
       - name: Summary
         run: |
           {

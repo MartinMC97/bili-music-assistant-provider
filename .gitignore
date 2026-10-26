@@ -22,3 +22,4 @@ artifacts/token.txt
 .env.*
 *.pem
 *.key
+.gh-cache/
