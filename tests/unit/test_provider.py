@@ -139,9 +139,9 @@ class FakeClient:
             raise self.search_error
         return list(self.search_items)
 
-    async def view(self, bvid: str) -> dict[str, Any]:
-        """Return a canned view payload."""
-        self.calls.append(("view", bvid))
+    async def view(self, bvid: str | None = None, aid: int | None = None) -> dict[str, Any]:
+        """Return a canned view payload for a bvid or aid."""
+        self.calls.append(("view", bvid if bvid is not None else aid))
         self.view_calls += 1
         if self.view_error is not None:
             raise self.view_error
@@ -507,6 +507,30 @@ async def test_search_filters_dedupes_sorts_and_truncates() -> None:
     assert client.calls[0][0] == "search"
     # The provider asks for enough raw results to survive filtering/dedupe.
     assert client.calls[0][1:] == ("周杰伦", 1, 20)
+
+
+async def test_search_by_av_returns_single_video_track() -> None:
+    """An av query resolves one track via the aid path."""
+    view_data = {
+        "bvid": "BV1xx411c7mD",
+        "aid": 170001,
+        "title": "AV test video",
+        "pic": "//i0.hdslb.com/bfs/archive/cover.jpg",
+        "duration": 300,
+        "pubdate": 1,
+        "owner": {"mid": 42, "name": "UP"},
+        "stat": {"view": 10},
+        "pages": [{"cid": 111, "page": 1, "part": "P1", "duration": 300}],
+    }
+    client = FakeClient(view_data=view_data)
+    provider, _ = await make_provider(client=client)
+
+    result = await provider.search("AV170001", [MediaType.TRACK], limit=5)
+
+    assert len(result.tracks) == 1
+    assert result.tracks[0].item_id == "av170001"
+    assert client.view_calls == 1
+    assert client.calls == [("view", 170001)]
 
 
 async def test_search_by_bvid_returns_single_video_track() -> None:

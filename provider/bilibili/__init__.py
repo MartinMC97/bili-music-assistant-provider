@@ -68,8 +68,8 @@ SUPPORTED_FEATURES = {
 }
 
 #: Human readable titles for the quality select; values come from constants.
-#: Bilibili video id: ``BV`` + 10 case-sensitive characters.
-_BVID_RE: Final = re.compile(r"BV[0-9A-Za-z]{10}")
+#: Bilibili video id: ``BV`` + 10 case-sensitive characters, or ``av<aid>``.
+_VIDEO_ID_RE: Final = re.compile(r"(?:BV[0-9A-Za-z]{10}|av\d+)", re.IGNORECASE)
 
 _QUALITY_TITLES: Final = {
     constants.QUALITY_AUTO: "自动（最高可用）",
@@ -718,7 +718,7 @@ class BilibiliProvider(MusicProvider):
         if not query:
             return SearchResults()
 
-        if _BVID_RE.fullmatch(query):
+        if _VIDEO_ID_RE.fullmatch(query):
             try:
                 data = await self._view(query)
                 track = parsers.parse_view(data, self.instance_id)
@@ -726,9 +726,10 @@ class BilibiliProvider(MusicProvider):
                 raise MediaNotFoundError(f"Bilibili video {query} has no usable metadata") from err
             # Keep this branch deliberately single-track; multi-part expansion
             # lives on its own feature branch and is not part of this change.
-            track.item_id = query
+            item_id = f"av{query[2:]}" if query.lower().startswith("av") else query
+            track.item_id = item_id
             for mapping in track.provider_mappings:
-                mapping.item_id = query
+                mapping.item_id = item_id
             self._remember_artist_names([track])
             return SearchResults(tracks=[track])
 
