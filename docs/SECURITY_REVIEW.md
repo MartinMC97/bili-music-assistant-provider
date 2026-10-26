@@ -77,3 +77,17 @@ git ls-files | grep -Ei "token|\.env|\.pem|\.key|dev-data"
 
 - WBI 签名参数置换表、接口路径属于 B 站公开前端协议；实现代码为本仓库编写。
 - 标题噪声词/清洗思路参考了 BiliMusic（该仓库当前没有 LICENSE 文件）；如果后续要正式分发，建议在 README 里注明参考来源并确认授权。
+
+## 复查记录（2026-10-26）
+
+对当前 HEAD 与全部 20 个 commit 重新扫描：
+
+- 59 个 tracked 文件；高精度模式覆盖 JWT、GitHub token、`SESSDATA=`、`bili_jct=`、`DedeUserID=`、私钥、AWS/Slack key、内网 IP、本地绝对路径、密码字面量。
+- 当前树唯一命中：**本文档里的 `/home/...` 示例占位符**，不是真实路径。
+- 全部历史 blob 的命中也只有同一个占位符；未发现真实凭据或内网地址。
+- tracked 文件名没有 `token` / `.env` / `.pem` / `.key` / `auth.db` / `dev-data`。
+- commit author/committer 只有 `MartinMC97` 的 noreply 地址。
+- workflow 只使用 `secrets.GITHUB_TOKEN`，没有自定义 secret。
+- `.dockerignore` 追加 `.dev-data*`、`.env*`、`*.pem`、`*.key` 和缓存目录，避免误入构建上下文。
+
+> 本地 `.dev-data/` 仍然包含 MA 的 auth DB、Bilibili 登录凭据和 WebRTC 私钥；它不在 git 里，但打包/分享整个目录前必须删除。

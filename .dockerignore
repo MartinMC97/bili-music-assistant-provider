@@ -8,3 +8,11 @@ tests
 **/__pycache__
 **/*.pyc
 .github
+.dev-data*
+.env
+.env.*
+*.pem
+*.key
+.gh-cache
+.pytest_cache
+.ruff_cache
