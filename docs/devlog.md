@@ -48,4 +48,4 @@
 | 09:49 | 发布 | 远端 `MartinMC97/bili-music-assistant-provider` 已创建（private）；替换 manifest/README 占位符；统一提交身份为 MartinMC97；重写历史后推送 `main` | 远端 HEAD = `611abf8`；10 个 commit；默认分支 `main` |
 | 10:00 | 许可证 | 添加 Apache-2.0 `LICENSE` + `NOTICE`；`pyproject.toml` 增加 license/authors/urls；README 增加 License 段 | 与 MA 核心同协议，便于后续 upstream |
 | 15:30 | CI | 新增 `.github/workflows/docker-publish.yml`：push main/tag/PR 触发，buildx 多架构推 GHCR | 首次 run `40285453478` 成功（4m22s），推送 `main` / `latest` / `sha-4cb9c12`，digest `sha256:3b0d…` |
-| 15:36 | CI | 增加发布后 `docker buildx imagetools inspect` 校验 amd64/arm64；补充 GHCR 拉取文档 | 第二次 run 验证中 |
+| 15:36 | CI | 增加发布后 `docker buildx imagetools inspect` 校验 amd64/arm64；补充 GHCR 拉取文档 | 第二次 run `40286074884` 成功，manifest 校验 amd64/arm64 通过；随后加 paths-ignore/手动输入 |

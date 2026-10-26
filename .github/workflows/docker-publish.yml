@@ -4,9 +4,24 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - "NOTICE"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - "NOTICE"
   workflow_dispatch:
+    inputs:
+      ma_version:
+        description: "Music Assistant base image tag (default: 2.10.8)"
+        required: false
+        default: "2.10.8"
 
 concurrency:
   group: docker-${{ github.workflow }}-${{ github.ref }}
@@ -84,7 +99,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            MA_VERSION=${{ vars.MA_VERSION || '2.10.8' }}
+            MA_VERSION=${{ inputs.ma_version || vars.MA_VERSION || '2.10.8' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: ${{ github.event_name != 'pull_request' }}
