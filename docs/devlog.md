@@ -53,3 +53,4 @@
 | 16:02 | CI | 镜像改名为 `ghcr.io/martinmc97/music-assistant`，tag 增加 `2.10.8-bili`（随 MA_VERSION 生成）；run `40289282143` 成功（2m57s） | tags: `main` / `2.10.8-bili` / `latest` / `sha-cdfaf3f`；digest `sha256:c1b48ebb448f92fc65dcf7dfc02fbe2781ecc00324783c3d87a29183978b8c83`；旧包停更 |
 | 18:40 | Bugfix | 生产日志：排行榜 `BV1UQK7zAEHK` 的 `playurl` 返回 -404；rank `cid=40693796622` 是音乐元数据 id，view 的真实 `cid=30684679213` | `parse_music_center_item` 不再把 music-center cid 拼进 item_id，改由 `get_stream_details` 从 view 解析；新增回归测试 |
 | 18:50 | CI | 镜像不可变 tag 改为 `<MA_VERSION>-bili-<commit7>`，新增 `Resolve build revision`；移除通用的 `2.10.8-bili` 别名 | 下次构建生效；workflow 仍 disabled |
+| 18:55 | CI | 去掉 `workflow_dispatch` 里写死的 2.10.8 默认值，留空回退到仓库变量 `MA_VERSION`；设置仓库变量 `MA_VERSION=2.10.8` | 手动触发不再覆盖变量；tag 仍为 `<版本>-bili-<commit>` |

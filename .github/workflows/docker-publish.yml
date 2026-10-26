@@ -19,9 +19,8 @@ on:
   workflow_dispatch:
     inputs:
       ma_version:
-        description: "Music Assistant base image tag (default: 2.10.8)"
+        description: "MA base image tag; leave empty to use repository variable MA_VERSION (fallback 2.10.8)"
         required: false
-        default: "2.10.8"
 
 concurrency:
   group: docker-${{ github.workflow }}-${{ github.ref }}

@@ -1,5 +1,6 @@
 # Build a Music Assistant image with the Bilibili provider baked in.
-# Usage: docker build -f docker/Dockerfile -t bilibili-ma:2.10.8 .
+# Usage: docker build -f docker/Dockerfile -t music-assistant:2.10.8-bili .
+# Override the base MA version with --build-arg MA_VERSION=x.y.z
 ARG MA_VERSION=2.10.8
 FROM ghcr.io/music-assistant/server:${MA_VERSION}
 
