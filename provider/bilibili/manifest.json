@@ -4,8 +4,10 @@
   "stage": "alpha",
   "name": "Bilibili",
   "description": "Bilibili 视频音轨作为音乐源（非官方，只读）",
-  "codeowners": ["@local-dev"],
+  "codeowners": [
+    "@your-github-handle"
+  ],
   "requirements": [],
-  "documentation": "https://github.com/local/bilibili-ma-provider",
+  "documentation": "https://github.com/your-name/bilibili-ma-provider",
   "multi_instance": true
 }

@@ -385,7 +385,7 @@ manifest 依赖为空符合 plan §2.4（避免可选依赖拖垮加载），`se
 
 - `docker/compose.dev.yml` 设置了 `LOG_LEVEL: debug`；aiohttp/MA 的 HTTP trace 是否会在 DEBUG 下打印带 WBI 签名/搜索关键字的完整 URL，不在 provider 控制内。生产默认不要开 debug。
 - `auth.BilibiliCredential` 的 repr 见 P2-19。
-- 工作区存在未跟踪的 `artifacts/token.txt`（377 字节，本轮**没有读取内容**），且 `.gitignore` 只忽略 `artifacts/*.log`/`*.json`，没有忽略 `token.txt`。提交前请确认它不是真实 token；如果是，应删除或加入 `.gitignore`。
+- 工作区存在一个未跟踪的本地 dev token 文件（本轮**没有读取内容**）；提交前应确认它被 `.gitignore` 覆盖。
 
 ### P2-25 `get_stream_details` 对非 TRACK 抛 `MediaNotFoundError`
 
@@ -461,7 +461,7 @@ manifest 依赖为空符合 plan §2.4（避免可选依赖拖垮加载），`se
 4. **P1-3/P1-4**：reconfigure 匿名清凭据；quality 上限语义与契约对齐。
 5. **P2 播放组**：av id、probe 异常、负缓存、AudioFormat/channels、StreamDetails.data、`max_concurrent_streams`。
 6. **P2 收藏夹组**：position/has_more/空页、默认夹 id 验证、缓存。
-7. **P2 安全/分发**：credential repr、`saved_at` 容错、segno 安装说明、`artifacts/token.txt` 处置。
+7. **P2 安全/分发**：credential repr、`saved_at` 容错、segno 安装说明、本地 dev token 文件处置。
 8. **测试补强**：按第 8 节 11 个缺口逐项补离线用例；2.10.7/2.10.8 的加载 smoke 可在 CI 里用真实 MA import 一次（不联网）。
 
 ---
@@ -469,5 +469,5 @@ manifest 依赖为空符合 plan §2.4（避免可选依赖拖垮加载），`se
 ## 11. 备注
 
 - 按角色要求只写了 `artifacts/review.md`；未修改任何 provider/test/docs 文件，未执行 `git add`/`git commit`。
-- 未读取 `artifacts/token.txt` 的内容；只记录了它的存在和未被 `.gitignore` 覆盖的事实。
+- 未读取本地 dev token 文件的内容；只记录了它未被 `.gitignore` 覆盖的事实。
 - 测试命令与结果见第 1 节；所有复现都使用 fake 对象，不联网。

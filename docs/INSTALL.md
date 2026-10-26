@@ -263,4 +263,4 @@ docker logs --tail=200 music-assistant 2>&1 | grep -iE "bilibili|error|traceback
 
 - 本项目与 Bilibili 无隶属或授权关系，不内置任何音视频资源。
 - 仅用于学习、研究与个人使用；不要用于下载、二次分发、绕过会员/付费或规避平台限制。
-- 不要把暴露在公网的 MA 实例设成弱口令；本文的 `admin/<password>` 只是本地开发示例。
+- 不要把暴露在公网的 MA 实例设成弱口令；本地临时口令在公网部署前必须改掉。
