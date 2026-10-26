@@ -46,3 +46,4 @@
 | 09:20 | 安装体验 | 新增 `docs/INSTALL.md`、`scripts/install_venv.py`、`uninstall_venv.py`、`install_docker.sh` | 干净容器实测 `install_docker.sh`：provider 落盘 + 重启成功；venv 脚本用假包目录验证安装/卸载 |
 | 09:24 | 文档 | README 增加“安装到自己的 MA”入口；INSTALL 覆盖 Docker 镜像/bind mount/venv/HAOS 限制 | 明确“不要 pip install provider”、真实包路径、segno 可选 |
 | 09:49 | 发布 | 远端 `MartinMC97/bili-music-assistant-provider` 已创建（private）；替换 manifest/README 占位符；统一提交身份为 MartinMC97；重写历史后推送 `main` | 远端 HEAD = `611abf8`；10 个 commit；默认分支 `main` |
+| 10:00 | 许可证 | 添加 Apache-2.0 `LICENSE` + `NOTICE`；`pyproject.toml` 增加 license/authors/urls；README 增加 License 段 | 与 MA 核心同协议，便于后续 upstream |

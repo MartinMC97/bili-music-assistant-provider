@@ -91,6 +91,12 @@ docker compose -f docker/compose.build.yml up -d
 - 之后：稳定 1 周后再打 PyPI 包 + `music-assistant-plugin-manager`（见 `docs/implementation-plan.md` M8）。
 - HAOS add-on：MA 只从包内 `providers/` 发现 provider，**没有官方注入点**；要全覆盖只能上游合并。
 
+## License
+
+[Apache-2.0](LICENSE)。版权与归属见 [NOTICE](NOTICE)。
+
+本项目为**非官方项目**，与 Bilibili 无隶属、授权或背书关系；Apache-2.0 只授予代码版权许可，不授予 Bilibili 名称、logo 或商标的使用权。
+
 ## 免责声明
 
-本项目与 Bilibili 无隶属或授权关系，不内置任何音视频资源。仅用于学习、研究与个人使用；请遵守当地法律与平台条款，不要用于侵权或规避平台限制。
+本项目不内置任何音视频资源。仅用于学习、研究与个人使用；请遵守当地法律与平台条款，不要用于侵权或规避平台限制。

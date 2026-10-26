@@ -3,7 +3,14 @@ name = "bilibili-ma-provider"
 version = "0.1.0a0"
 description = "Bilibili video audio as a Music Assistant music provider (unofficial)"
 requires-python = ">=3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{name = "MartinMC97"}]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/MartinMC97/bili-music-assistant-provider"
+Repository = "https://github.com/MartinMC97/bili-music-assistant-provider"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

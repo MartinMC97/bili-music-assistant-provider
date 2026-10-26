@@ -17,6 +17,7 @@
 | 本地示例口令 | 从安装文档中移除，改为通用提示 |
 | 评审报告里的本地 token 文件描述 | 改为“未跟踪的本地 dev token 文件”，不包含路径/内容 |
 | `manifest.json` 的 codeowner / documentation | 已替换为 `@MartinMC97` 和真实仓库 URL |
+| 许可证 | 已添加 Apache-2.0 `LICENSE` + `NOTICE` |
 | git 历史中的上述两项 | 已用 `git filter-branch` 重写全部 commit，并清理旧对象 |
 
 ## 扫描结果
@@ -53,10 +54,9 @@
 
 ## 推送前还要做的（人工）
 
-1. 决定并添加 `LICENSE`（当前仓库没有协议文件）。
-2. 在 GitHub 仓库设置里开启 **Secret scanning** 和 **Push protection**。
-3. 不要把 `.dev-data/`、本地 token、真实 Cookie、`artifacts/token.txt` 提交进去。
-4. 如果要提 upstream PR，先确认 `codeowners`、`stage: alpha`、文档和 B 站 ToS 的合规表述。
+1. 在 GitHub 仓库设置里开启 **Secret scanning** 和 **Push protection**。
+2. 不要把 `.dev-data/`、本地 token、真实 Cookie、`artifacts/token.txt` 提交进去。
+3. 如果要提 upstream PR，先确认 `codeowners`、`stage: alpha`、文档和 B 站 ToS 的合规表述。
 
 ## 复跑扫描
 
