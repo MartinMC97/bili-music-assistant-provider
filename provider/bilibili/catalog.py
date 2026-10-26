@@ -323,7 +323,9 @@ async def browse_items(
                 item_id=item_id,
                 provider=provider_instance,
                 name=name,
-                path=item_id,
+                # MA's music/browse command expects "<instance>://<sub_path>";
+                # a bare key makes the controller fail to unpack the path.
+                path=f"{provider_instance}://{item_id}",
             )
             for item_id, name in _BROWSE_FOLDERS
         ]

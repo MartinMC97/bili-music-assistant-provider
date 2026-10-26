@@ -374,7 +374,11 @@ async def test_browse_root_returns_three_folders() -> None:
         assert len(items) == 3
         assert all(isinstance(item, BrowseFolder) for item in items)
         assert [item.item_id for item in items] == ["rank", "new", "favorites"]
-        assert [item.path for item in items] == ["rank", "new", "favorites"]
+        assert [item.path for item in items] == [
+            f"{PROVIDER}://rank",
+            f"{PROVIDER}://new",
+            f"{PROVIDER}://favorites",
+        ]
         assert [item.name for item in items] == ["排行榜", "新歌", "收藏夹"]
         assert all(item.provider == PROVIDER for item in items)
         assert client.calls == []
