@@ -57,6 +57,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Resolve build revision
+        id: revision
+        shell: bash
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Normalise image name
         id: image
         shell: bash
@@ -85,7 +90,7 @@ jobs:
         with:
           images: ${{ steps.image.outputs.name }}
           tags: |
-            type=raw,value=${{ steps.version.outputs.ma_version }}-bili,enable={{is_default_branch}}
+            type=raw,value=${{ steps.version.outputs.ma_version }}-bili-${{ steps.revision.outputs.short }}
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}

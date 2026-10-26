@@ -33,10 +33,10 @@ MA 发现 provider 的规则是：**只扫描 `music_assistant/providers/<domain
 ```bash
 # 需要 read:packages 权限的 GitHub token
 echo "$CR_PAT" | docker login ghcr.io -u MartinMC97 --password-stdin
-docker pull ghcr.io/martinmc97/music-assistant:2.10.8-bili
+docker pull ghcr.io/martinmc97/music-assistant:latest
 ```
 
-标签：`2.10.8-bili`（MA 2.10.8 + provider）、`latest`（main 最新）、`main`、`sha-<commit>`；打 `v0.1.0` tag 时会生成 `0.1.0` / `0.1`。想免登录拉取，在 GitHub 的 Packages 设置里把包改为 public。
+标签：`2.10.8-bili-<commit>`（MA 2.10.8 + 某次 provider 构建，commit 为 7 位短 id）、`latest`（main 最新）、`main`、`sha-<commit>`；打 `v0.1.0` tag 时会生成 `0.1.0` / `0.1`。想免登录拉取，在 GitHub 的 Packages 设置里把包改为 public。
 
 旧镜像名 `ghcr.io/martinmc97/bili-music-assistant-provider` 已停止更新。
 

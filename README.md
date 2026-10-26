@@ -94,15 +94,18 @@ ghcr.io/martinmc97/music-assistant
 ```
 
 - 平台：`linux/amd64`、`linux/arm64`
-- 标签：`2.10.8-bili`（main，MA 2.10.8 + Bilibili provider）、`latest`（main）、`main`、`sha-<short>`；tag `v0.1.0` 额外生成 `0.1.0`、`0.1`
-- 基础 MA 版本由仓库变量 `MA_VERSION` 控制，默认 `2.10.8`；改版本后会自动生成对应的 `<version>-bili` 标签
+- 标签：`2.10.8-bili-<commit>`（MA 2.10.8 + 某次 provider 构建，commit 为 7 位短 id）、`latest`（main）、`main`、`sha-<commit>`；tag `v0.1.0` 额外生成 `0.1.0`、`0.1`
+- 基础 MA 版本由仓库变量 `MA_VERSION` 控制，默认 `2.10.8`；改版本后会自动生成对应的 `<version>-bili-<commit>` 标签
 - 旧镜像名 `ghcr.io/martinmc97/bili-music-assistant-provider` 不再更新
 
 包默认继承仓库可见性（private）。拉取前登录：
 
 ```bash
 echo "$CR_PAT" | docker login ghcr.io -u MartinMC97 --password-stdin
-docker pull ghcr.io/martinmc97/music-assistant:2.10.8-bili
+docker pull ghcr.io/martinmc97/music-assistant:latest
+
+# 固定到某次 provider 构建
+docker pull ghcr.io/martinmc97/music-assistant:2.10.8-bili-<commit>
 ```
 
 如果想让别人免登录拉取，在 GitHub → **Packages** → 该镜像 → Package settings 里把可见性改成 public。
