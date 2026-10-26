@@ -27,7 +27,7 @@
 | JWT / Bearer token / `eyJ...` | 未发现 |
 | 私钥 / `.pem` / `.key` / `.env` | 未发现，也没有被跟踪 |
 | 内网 IP（192.168/10./172.16-31/100.x） | HEAD 与历史均未发现 |
-| 邮箱、真实 B 站 mid、实例 id | 未发现（测试用 `42` 等占位） |
+| 登录用户 mid / 实例 id / 邮箱 | 未发现；fixture 只保留公开视频与 UP 主的 mid（公开 API 数据） |
 | 本地绝对路径（`/home/...`） | 未发现 |
 | `.dev-data` / `artifacts/token.txt` | 未跟踪；`.gitignore` 覆盖 |
 | 测试 fixture 中的 CDN 签名 URL | 已替换为 `cdn.example.invalid` / `backup.example.invalid` |
