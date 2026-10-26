@@ -509,6 +509,33 @@ async def test_search_filters_dedupes_sorts_and_truncates() -> None:
     assert client.calls[0][1:] == ("周杰伦", 1, 20)
 
 
+async def test_search_by_bvid_returns_single_video_track() -> None:
+    """A BVID query resolves one video track instead of keyword search."""
+    view_data = {
+        "bvid": "BV1AWTY6HEPr",
+        "aid": 1,
+        "title": "FGO OST 8",
+        "pic": "//i0.hdslb.com/bfs/archive/cover.jpg",
+        "duration": 300,
+        "pubdate": 1,
+        "owner": {"mid": 42, "name": "UP"},
+        "stat": {"view": 10},
+        "pages": [
+            {"cid": 111, "page": 1, "part": "Part One", "duration": 180},
+            {"cid": 222, "page": 2, "part": "Part Two", "duration": 154},
+        ],
+    }
+    client = FakeClient(view_data=view_data)
+    provider, _ = await make_provider(client=client)
+
+    result = await provider.search("BV1AWTY6HEPr", [MediaType.TRACK], limit=5)
+
+    assert len(result.tracks) == 1
+    assert result.tracks[0].item_id == "BV1AWTY6HEPr"
+    assert client.view_calls == 1
+    assert client.calls == [("view", "BV1AWTY6HEPr")]
+
+
 async def test_search_honours_search_limit_config() -> None:
     """search_limit caps the number of results even for a larger MA limit."""
     client = FakeClient(

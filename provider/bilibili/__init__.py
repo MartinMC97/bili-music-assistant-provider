@@ -10,6 +10,7 @@ them into the Music Assistant provider API.
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import AsyncGenerator, Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Final
@@ -67,6 +68,9 @@ SUPPORTED_FEATURES = {
 }
 
 #: Human readable titles for the quality select; values come from constants.
+#: Bilibili video id: ``BV`` + 10 case-sensitive characters.
+_BVID_RE: Final = re.compile(r"BV[0-9A-Za-z]{10}")
+
 _QUALITY_TITLES: Final = {
     constants.QUALITY_AUTO: "自动（最高可用）",
     constants.QUALITY_FLAC: "FLAC 无损",
@@ -713,6 +717,20 @@ class BilibiliProvider(MusicProvider):
         query = str(search_query or "").strip()
         if not query:
             return SearchResults()
+
+        if _BVID_RE.fullmatch(query):
+            try:
+                data = await self._view(query)
+                track = parsers.parse_view(data, self.instance_id)
+            except ValueError as err:
+                raise MediaNotFoundError(f"Bilibili video {query} has no usable metadata") from err
+            # Keep this branch deliberately single-track; multi-part expansion
+            # lives on its own feature branch and is not part of this change.
+            track.item_id = query
+            for mapping in track.provider_mappings:
+                mapping.item_id = query
+            self._remember_artist_names([track])
+            return SearchResults(tracks=[track])
 
         search_cap = self._config_int(constants.CONF_SEARCH_LIMIT, constants.DEFAULT_SEARCH_LIMIT)
         if search_cap <= 0:
