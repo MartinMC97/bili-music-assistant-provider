@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Pytest and Ruff (MA 2.10.8)
+        shell: bash
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            --entrypoint sh \
+            ghcr.io/music-assistant/server:2.10.8 \
+            -c "/app/venv/bin/uv pip install -q --python /app/venv/bin/python pytest pytest-asyncio ruff segno==1.6.6 && /app/venv/bin/python -m pytest -q && /app/venv/bin/ruff check provider tests"
