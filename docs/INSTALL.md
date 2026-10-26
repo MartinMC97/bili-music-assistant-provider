@@ -29,7 +29,7 @@ MA 发现 provider 的规则是：**只扫描 `music_assistant/providers/<domain
 适合长期使用，MA 重建/升级后仍然保留。
 
 ```bash
-git clone <this-repo-url> bilibili-ma-provider
+git clone https://github.com/MartinMC97/bili-music-assistant-provider.git bilibili-ma-provider
 cd bilibili-ma-provider
 
 # 默认基于 2.10.8；如果自己的 MA 是 2.10.7，把 build-arg 改成 2.10.7
@@ -130,7 +130,7 @@ docker exec music-assistant /app/venv/bin/uv pip install --no-cache segno==1.6.6
 用 **MA 所在 venv 的 Python** 执行安装脚本：
 
 ```bash
-git clone <this-repo-url> bilibili-ma-provider
+git clone https://github.com/MartinMC97/bili-music-assistant-provider.git bilibili-ma-provider
 cd bilibili-ma-provider
 
 /path/to/ma-venv/bin/python scripts/install_venv.py

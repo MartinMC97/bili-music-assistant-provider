@@ -5,9 +5,9 @@
   "name": "Bilibili",
   "description": "Bilibili 视频音轨作为音乐源（非官方，只读）",
   "codeowners": [
-    "@your-github-handle"
+    "@MartinMC97"
   ],
   "requirements": [],
-  "documentation": "https://github.com/your-name/bilibili-ma-provider",
+  "documentation": "https://github.com/MartinMC97/bili-music-assistant-provider",
   "multi_instance": true
 }

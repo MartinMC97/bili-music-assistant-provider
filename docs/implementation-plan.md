@@ -271,7 +271,7 @@ unload()               → 关闭 client（若自建 session）、清缓存
   "description": "Bilibili 视频音轨作为音乐源（非官方）",
   "codeowners": ["@your-handle"],
   "requirements": [],
-  "documentation": "https://github.com/<you>/bilibili-ma-provider",
+  "documentation": "https://github.com/MartinMC97/bili-music-assistant-provider",
   "multi_instance": true
 }
 ```
