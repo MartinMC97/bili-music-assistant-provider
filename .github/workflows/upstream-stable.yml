@@ -1,0 +1,167 @@
+name: Upstream stable release
+
+on:
+  schedule:
+    # Check every 6 hours; GitHub may delay scheduled runs under load.
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      ma_version:
+        description: "MA stable version to build (empty = latest stable)"
+        required: false
+      force:
+        description: "Build even if MA_VERSION already matches"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  actions: write
+
+concurrency:
+  group: upstream-stable
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/music-assistant
+
+jobs:
+  check:
+    name: Check upstream stable
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      build: ${{ steps.resolve.outputs.build }}
+    steps:
+      - name: Resolve version
+        id: resolve
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED: ${{ inputs.ma_version }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          if [ -n "${REQUESTED:-}" ]; then
+            version="${REQUESTED#v}"
+          else
+            version="$(gh api repos/music-assistant/server/releases/latest --jq '.tag_name')"
+            version="${version#v}"
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::MA version '$version' is not a stable x.y.z release"
+            exit 1
+          fi
+
+          current="$(gh api "repos/${GITHUB_REPOSITORY}/actions/variables/MA_VERSION" --jq '.value' 2>/dev/null || true)"
+          build=false
+          if [ "${FORCE:-false}" = "true" ]; then
+            build=true
+          elif [ -z "$current" ]; then
+            build=true
+          elif [ "$version" = "$current" ]; then
+            build=false
+          else
+            newest="$(printf '%s\n%s\n' "$current" "$version" | sort -V | tail -n1)"
+            [ "$newest" = "$version" ] && build=true || build=false
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "current=${current:-<unset>}" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "MA_VERSION: ${current:-<unset>} -> ${version}; build=${build}; force=${FORCE:-false}"
+
+  build:
+    name: Build and publish
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve build revision
+        id: revision
+        shell: bash
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Normalise image name
+        id: image
+        shell: bash
+        run: echo "name=${REGISTRY}/${IMAGE_NAME,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test provider against the new MA version
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        shell: bash
+        run: |
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e PYTHONDONTWRITEBYTECODE=1 \
+            --entrypoint sh \
+            "ghcr.io/music-assistant/server:${VERSION}" \
+            -c "/app/venv/bin/uv pip install -q --python /app/venv/bin/python pytest pytest-asyncio ruff segno==1.6.6 && /app/venv/bin/python -m pytest -q && /app/venv/bin/ruff check provider tests"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=${{ needs.check.outputs.version }}-bili-${{ steps.revision.outputs.short }}
+            type=raw,value=latest
+            type=sha,prefix=sha-
+          labels: |
+            org.opencontainers.image.title=music-assistant-bili
+            org.opencontainers.image.description=Bilibili video audio provider for Music Assistant (unofficial)
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.base.name=ghcr.io/music-assistant/server:${{ needs.check.outputs.version }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            MA_VERSION=${{ needs.check.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Verify published manifest
+        shell: bash
+        run: |
+          IMAGE_REF="$(printf '%s\n' "${{ steps.meta.outputs.tags }}" | head -n1)"
+          docker buildx imagetools inspect "$IMAGE_REF" | tee /tmp/manifest.txt
+          grep -q "linux/amd64" /tmp/manifest.txt
+          grep -q "linux/arm64" /tmp/manifest.txt
+
+      - name: Record MA_VERSION
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+        shell: bash
+        run: gh variable set MA_VERSION --repo "$GITHUB_REPOSITORY" --body "$VERSION"
