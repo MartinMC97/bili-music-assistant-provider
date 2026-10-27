@@ -57,3 +57,4 @@
 | 18:47 | CI | 手动触发 `40309889791` 成功（2m8s）；新 tag 规则生效：`2.10.8-bili-39896f7`，另有 `main` / `latest` / `sha-39896f7` | digest `sha256:16327bf7891233d4ed86eb2cf6bddb80ec86164a365e0b75b5cd23ffd0c6adf1`；amd64+arm64 校验通过 |
 | 20:05 | 分支 | 基于 `main` 新建 `feat/bvid-search`，只实现完整 BVID 直达：`search()` 识别 `BV+10位` 后调 `view` 返回单条 Track | 不包含多 P 展开/收藏夹过滤；与 `feat/expand-multipart-tracks` 完全独立 |
 | 20:15 | 分支 | `feat/bvid-search` 扩展为 BV/av 直达：正则同时匹配 `BV+10位` 和 `av<数字>`；av 走 `_view(aid)`，返回单条 Track | 不含多 P 展开/收藏夹过滤 |
+| 20:30 | CI | 新增 `upstream-stable.yml`：每 6 小时查 MA `releases/latest`；新 stable 先跑 pytest/ruff，再构建多架构镜像、推 `latest`，成功后更新 `MA_VERSION` | 手动 dispatch 支持指定版本和 `force`；与 BVID 分支独立 |
