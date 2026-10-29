@@ -96,8 +96,8 @@ ghcr.io/martinmc97/music-assistant
 
 - 平台：`linux/amd64`、`linux/arm64`
 - 标签：`2.10.8-bili-<commit>`（MA 2.10.8 + 某次 provider 构建，commit 为 7 位短 id）、`latest`（main）、`main`、`sha-<commit>`；tag `v0.1.0` 额外生成 `0.1.0`、`0.1`
-- 基础 MA 版本由仓库变量 `MA_VERSION` 控制（默认 `2.10.8`）；手动触发时留空即使用该变量。改版本后会自动生成对应的 `<version>-bili-<commit>` 标签
-- 上游发布新的 stable 版本时，`upstream-stable.yml` 每 6 小时检查一次；先用该版本跑测试，通过后构建 `<version>-bili-<commit>` 和 `latest`，并更新 `MA_VERSION`
+- 基础 MA 版本默认自动查询上游 latest stable；手动触发可指定版本，仓库变量 `MA_VERSION` 只在 API 查询失败时兜底
+- 上游发布新的 stable 版本时，`upstream-stable.yml` 每 6 小时检查一次；若 GHCR 上还没有对应的 `<version>-bili-<commit>`，先用该版本跑测试，通过后构建并推送 `latest`
 - 旧镜像名 `ghcr.io/martinmc97/bili-music-assistant-provider` 不再更新
 
 包默认继承仓库可见性（private）。拉取前登录：

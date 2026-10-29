@@ -10,7 +10,7 @@ on:
         description: "MA stable version to build (empty = latest stable)"
         required: false
       force:
-        description: "Build even if MA_VERSION already matches"
+        description: "Build even if the image tag already exists"
         type: boolean
         default: false
 
@@ -18,7 +18,6 @@ permissions:
   contents: read
   packages: write
   id-token: write
-  actions: write
 
 concurrency:
   group: upstream-stable
@@ -34,15 +33,19 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.resolve.outputs.version }}
-      build: ${{ steps.resolve.outputs.build }}
+      build: ${{ steps.image.outputs.build }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
       - name: Resolve version
         id: resolve
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REQUESTED: ${{ inputs.ma_version }}
-          FORCE: ${{ inputs.force }}
         run: |
           set -euo pipefail
           if [ -n "${REQUESTED:-}" ]; then
@@ -55,24 +58,36 @@ jobs:
             echo "::error::MA version '$version' is not a stable x.y.z release"
             exit 1
           fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved MA stable version: $version"
 
-          current="$(gh api "repos/${GITHUB_REPOSITORY}/actions/variables/MA_VERSION" --jq '.value' 2>/dev/null || true)"
-          build=false
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check existing image tag
+        id: image
+        shell: bash
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          short="$(git rev-parse --short=7 HEAD)"
+          ref="${REGISTRY}/${IMAGE_NAME,,}:${VERSION}-bili-${short}"
           if [ "${FORCE:-false}" = "true" ]; then
             build=true
-          elif [ -z "$current" ]; then
-            build=true
-          elif [ "$version" = "$current" ]; then
+          elif docker manifest inspect "$ref" >/dev/null 2>&1; then
             build=false
           else
-            newest="$(printf '%s\n%s\n' "$current" "$version" | sort -V | tail -n1)"
-            [ "$newest" = "$version" ] && build=true || build=false
+            build=true
           fi
-
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "current=${current:-<unset>}" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
           echo "build=$build" >> "$GITHUB_OUTPUT"
-          echo "MA_VERSION: ${current:-<unset>} -> ${version}; build=${build}; force=${FORCE:-false}"
+          echo "Image $ref exists; build=$build; force=${FORCE:-false}"
 
   build:
     name: Build and publish
@@ -158,10 +173,3 @@ jobs:
           docker buildx imagetools inspect "$IMAGE_REF" | tee /tmp/manifest.txt
           grep -q "linux/amd64" /tmp/manifest.txt
           grep -q "linux/arm64" /tmp/manifest.txt
-
-      - name: Record MA_VERSION
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.check.outputs.version }}
-        shell: bash
-        run: gh variable set MA_VERSION --repo "$GITHUB_REPOSITORY" --body "$VERSION"

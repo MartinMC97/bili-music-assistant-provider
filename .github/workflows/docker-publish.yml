@@ -72,8 +72,20 @@ jobs:
         id: version
         shell: bash
         env:
-          REQUESTED_MA_VERSION: ${{ inputs.ma_version || vars.MA_VERSION || '2.10.8' }}
-        run: echo "ma_version=${REQUESTED_MA_VERSION}" >> "$GITHUB_OUTPUT"
+          REQUESTED_MA_VERSION: ${{ inputs.ma_version }}
+          FALLBACK_MA_VERSION: ${{ vars.MA_VERSION || '2.10.8' }}
+        run: |
+          set -euo pipefail
+          version="${REQUESTED_MA_VERSION:-}"
+          if [ -z "$version" ]; then
+            version="$(curl -fsSL --max-time 15 https://api.github.com/repos/music-assistant/server/releases/latest \
+              | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"].lstrip("v"))' 2>/dev/null || true)"
+          fi
+          if [ -z "$version" ]; then
+            version="$FALLBACK_MA_VERSION"
+          fi
+          echo "ma_version=$version" >> "$GITHUB_OUTPUT"
+          echo "Using MA base version: $version"
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
