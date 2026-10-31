@@ -1,18 +1,18 @@
 # bilibili-ma-provider
 
-把 Bilibili 视频音轨接入 [Music Assistant](https://music-assistant.io) 的非官方音乐 provider。
+把 Bilibili 视频音轨接入 [Music Assistant](https://music-assistant.io) 的非官方音乐 provider。本项目只提供 Music Assistant 中的播放功能，不绕过会员/付费内容。请遵守 B 站服务条款，仅个人使用。
 
-> 状态：**alpha，可本地跑通**。目标 MA **2.10.8**（兼容 2.10.7），`music-assistant-models==1.1.205`，Python 3.14。
-> 只做流式播放：不下载、不落盘、不绕过会员/付费内容。请遵守 B 站服务条款，仅个人使用。
+## 能力
 
-## 已验证
+- 搜索 B 站视频并映射为曲目（标题清洗、时长过滤、去重）
+- BV/av 直达搜索：搜索框输入完整 12 位 `BV...` 或 `av<数字>`，直接返回该视频的单条 Track（多 P 视频按分 P 播放暂未实现）
+- 播放 DASH 音轨（AAC / FLAC / Dolby，取决于账号权益）
+- 扫码登录 / 手填 SESSDATA / 匿名使用
+- 收藏夹同步（只读，需要登录；整夹分页已处理）
+- 榜单/新歌推荐与浏览
+- 不做歌词、不做 UP 主作品列表（接口被风控）
 
-- MA 2.10.8 容器内 provider 正常加载、可搜索、可出流。
-- `get_stream_details()` → `ffmpeg -headers` 真实拉取 2 秒音频成功（AAC 48 kHz stereo，支持 seek）。
-- 匿名可用；登录后可同步收藏夹（只读）。
-- 单元测试：`176 passed, 1 skipped`；`ruff check` 通过。
-
-## 安装到自己的 Music Assistant
+## 安装
 
 完整步骤见 **[docs/INSTALL.md](docs/INSTALL.md)**。四种常用方式：
 
@@ -90,16 +90,6 @@ docker compose up -d
 
 provider 更新不影响 `/data`；MA 自己的数据库迁移会在启动时自动完成，升级前建议备份数据目录。
 
-## 能力
-
-- 搜索 B 站视频并映射为曲目（标题清洗、时长过滤、去重）
-- BV/av 直达搜索：搜索框输入完整 12 位 `BV...` 或 `av<数字>`，直接返回该视频的单条 Track（多 P 展开不在主分支）
-- 播放 DASH 音轨（AAC / FLAC / Dolby，取决于账号权益）
-- 扫码登录 / 手填 SESSDATA / 匿名使用
-- 收藏夹同步（只读，需要登录；整夹分页已处理）
-- 榜单/新歌推荐与浏览
-- 不做歌词、不做 UP 主作品列表（接口被风控）
-
 ## 目录
 
 ```text
@@ -168,15 +158,9 @@ docker pull ghcr.io/martinmc97/music-assistant:latest
 docker pull ghcr.io/martinmc97/music-assistant:2.10.8-bili-<commit>
 ```
 
-## 分发状态
-
-- 当前：本地 Docker / bind mount / venv 脚本。
-- 之后：稳定 1 周后再打 PyPI 包 + `music-assistant-plugin-manager`（见 `docs/implementation-plan.md` M8）。
-- HAOS add-on：MA 只从包内 `providers/` 发现 provider，**没有官方注入点**；要全覆盖只能上游合并。
-
 ## 参考与致谢
 
-- [**HanversionOvO/BiliMusic**](https://github.com/HanversionOvO/BiliMusic)：B 站接口行为、WBI 签名/扫码登录流程、DASH 音轨选择、标题清洗与噪声词思路的参考。BiliMusic 是 TypeScript/Electron 客户端；本仓库的 provider 是用 Python 按 Music Assistant 接口重写的，**没有复制它的 Electron/React 代码**。
+- [**HanversionOvO/BiliMusic**](https://github.com/HanversionOvO/BiliMusic)：B 站接口行为、WBI 签名/扫码登录流程、DASH 音轨选择、标题清洗与噪声词思路的参考。
 - [**music-assistant/server**](https://github.com/music-assistant/server)：provider API、`StreamDetails` 与流式播放模型。
 - **Bilibili 公开 Web API**：视频/音频接口路径与播放协议。
 
