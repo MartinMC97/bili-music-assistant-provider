@@ -28,15 +28,34 @@ MA 发现 provider 的规则是：**只扫描 `music_assistant/providers/<domain
 
 适合长期使用，MA 重建/升级后仍然保留。
 
-**也可以直接用 GHCR 上由 GitHub Actions 构建好的镜像**（包默认 private）：
+**也可以直接用 GHCR 上由 GitHub Actions 构建好的镜像**（公开包，无需登录）：
 
 ```bash
-# 需要 read:packages 权限的 GitHub token
-echo "$CR_PAT" | docker login ghcr.io -u MartinMC97 --password-stdin
 docker pull ghcr.io/martinmc97/music-assistant:latest
 ```
 
-标签：`2.10.8-bili-<commit>`（MA 2.10.8 + 某次 provider 构建，commit 为 7 位短 id）、`latest`（main 最新）、`main`、`sha-<commit>`；打 `v0.1.0` tag 时会生成 `0.1.0` / `0.1`。想免登录拉取，在 GitHub 的 Packages 设置里把包改为 public。
+标签：`2.10.8-bili-<commit>`（MA 2.10.8 + 某次 provider 构建，commit 为 7 位短 id）、`latest`（main 最新）、`main`、`sha-<commit>`；打 `v0.1.0` tag 时会生成 `0.1.0` / `0.1`。
+
+部署时把现有 compose 的 `image:` 换成该地址即可，其余配置不变：
+
+```yaml
+services:
+  music-assistant:
+    image: ghcr.io/martinmc97/music-assistant:latest
+    container_name: music-assistant
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /path/to/ma-data:/data
+    environment:
+      - LOG_LEVEL=info
+```
+
+```bash
+docker compose up -d
+```
+
+升级：`docker compose pull && docker compose up -d`。多架构镜像，`docker pull --platform linux/arm64 ...` 可显式指定。
 
 旧镜像名 `ghcr.io/martinmc97/bili-music-assistant-provider` 已停止更新。
 
