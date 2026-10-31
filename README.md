@@ -14,22 +14,81 @@
 
 ## 安装到自己的 Music Assistant
 
-完整步骤见 **[docs/INSTALL.md](docs/INSTALL.md)**。三种常用方式：
+完整步骤见 **[docs/INSTALL.md](docs/INSTALL.md)**。四种常用方式：
+
+### 方式 A：直接用构建好的 GHCR 镜像（最省事）
+
+GitHub Actions 已经把 provider 打进 MA 镜像，多架构（`linux/amd64` / `linux/arm64`）。
+包是**公开的，不需要登录**：
 
 ```bash
-# A. 构建自带 provider 的镜像（推荐，持久）
+docker pull ghcr.io/martinmc97/music-assistant:latest
+```
+
+把现有 MA 的 `image:` 换掉即可，**其它配置保持不动**：
+
+```yaml
+services:
+  music-assistant:
+    image: ghcr.io/martinmc97/music-assistant:latest
+    container_name: music-assistant
+    restart: unless-stopped
+    network_mode: host          # MA 靠 host 网络发现播放器
+    volumes:
+      - /path/to/ma-data:/data  # 沿用你原来的数据目录
+    environment:
+      - LOG_LEVEL=info
+```
+
+```bash
+docker compose up -d
+```
+
+不用 compose 的话：
+
+```bash
+docker run -d --name music-assistant \
+  --network host \
+  -v /path/to/ma-data:/data \
+  -e LOG_LEVEL=info \
+  ghcr.io/martinmc97/music-assistant:latest
+```
+
+- 镜像里已经包含 `provider/bilibili` 和 `segno`（扫码登录用），启动后**不需要再装任何东西**
+- 默认 `latest` 跟随 main；想固定版本用 `2.10.8-bili-<commit>`（7 位短 id），升级时改 tag 再 `docker compose up -d`
+- 指定架构：`docker pull --platform linux/arm64 ghcr.io/martinmc97/music-assistant:latest`
+- 群晖/威联通等用 Container Manager 的，把上面的镜像地址填进「映像」再映射 `/data` 即可
+
+### 方式 B：自己构建镜像（要改代码时用）
+
+```bash
 docker build -f docker/Dockerfile -t music-assistant:2.10.8-bili .
 # 然后把 compose 里的 image 换成 music-assistant:2.10.8-bili
+```
 
-# B. 快速塞进运行中的容器（重建会丢，适合先试）
-./scripts/install_docker.sh music-assistant
+### 方式 C：快速塞进运行中的容器
 
-# C. 裸机 / venv（用 MA 所在 venv 的 python）
-/path/to/ma-venv/bin/python scripts/install_venv.py
+```bash
+./scripts/install_docker.sh music-assistant   # 容器重建后会丢，适合先试
+```
+
+### 方式 D：裸机 / venv
+
+```bash
+/path/to/ma-venv/bin/python scripts/install_venv.py   # 用 MA 所在 venv 的 python
 ```
 
 装完重启 MA，在 **Settings → Providers → Add Provider → Bilibili** 里扫码或填 SESSDATA 即可。
-HAOS Add-on 没有官方 provider 注入点，见 INSTALL.md 的方式 D。
+HAOS Add-on 没有官方 provider 注入点，见 INSTALL.md。
+
+### 更新到新版本
+
+```bash
+docker compose pull music-assistant   # 或 docker pull <image>
+docker compose up -d
+```
+
+provider 更新不影响 `/data`；MA 自己的数据库迁移会在启动时自动完成，升级前建议备份数据目录。
 
 ## 能力
 
@@ -100,17 +159,14 @@ ghcr.io/martinmc97/music-assistant
 - 上游发布新的 stable 版本时，`upstream-stable.yml` 每 6 小时检查一次；若 GHCR 上还没有对应的 `<version>-bili-<commit>`，先用该版本跑测试，通过后构建并推送 `latest`
 - 旧镜像名 `ghcr.io/martinmc97/bili-music-assistant-provider` 不再更新
 
-包默认继承仓库可见性（private）。拉取前登录：
+包是 public，可以直接匿名拉取；部署步骤见上面的 **方式 A**。
 
 ```bash
-echo "$CR_PAT" | docker login ghcr.io -u MartinMC97 --password-stdin
 docker pull ghcr.io/martinmc97/music-assistant:latest
 
 # 固定到某次 provider 构建
 docker pull ghcr.io/martinmc97/music-assistant:2.10.8-bili-<commit>
 ```
-
-如果想让别人免登录拉取，在 GitHub → **Packages** → 该镜像 → Package settings 里把可见性改成 public。
 
 ## 分发状态
 
