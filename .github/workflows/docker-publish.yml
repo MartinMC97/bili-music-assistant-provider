@@ -19,8 +19,12 @@ on:
   workflow_dispatch:
     inputs:
       ma_version:
-        description: "MA base image tag; leave empty to use repository variable MA_VERSION (fallback 2.10.8)"
+        description: "MA base image tag; leave empty for latest upstream stable"
         required: false
+      promote_latest:
+        description: "Also move the latest/main tags (set false for beta builds)"
+        type: boolean
+        default: true
 
 concurrency:
   group: docker-${{ github.workflow }}-${{ github.ref }}
@@ -87,6 +91,28 @@ jobs:
           echo "ma_version=$version" >> "$GITHUB_OUTPUT"
           echo "Using MA base version: $version"
 
+      - name: Resolve tag flags
+        id: flags
+        shell: bash
+        env:
+          REQUESTED_PROMOTE: ${{ inputs.promote_latest }}
+          EVENT_NAME: ${{ github.event_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          # latest/main may only move for builds of the default branch, and a
+          # manual run can opt out so a beta build does not hijack them.
+          promote=false
+          if [ "${GITHUB_REF}" = "refs/heads/${DEFAULT_BRANCH}" ]; then
+            if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "${REQUESTED_PROMOTE:-true}" = "false" ]; then
+              promote=false
+            else
+              promote=true
+            fi
+          fi
+          echo "promote_latest=$promote" >> "$GITHUB_OUTPUT"
+          echo "Move latest/main tags: $promote"
+
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -102,12 +128,12 @@ jobs:
           images: ${{ steps.image.outputs.name }}
           tags: |
             type=raw,value=${{ steps.version.outputs.ma_version }}-bili-${{ steps.revision.outputs.short }}
-            type=ref,event=branch
+            type=ref,event=branch,enable=${{ steps.flags.outputs.promote_latest }}
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ steps.flags.outputs.promote_latest }}
           labels: |
             org.opencontainers.image.title=music-assistant-bili
             org.opencontainers.image.base.name=ghcr.io/music-assistant/server:${{ steps.version.outputs.ma_version }}
