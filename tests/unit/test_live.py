@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from bilibili import BilibiliProvider, live, parsers
+from bilibili import BilibiliProvider, constants, live, parsers
 from bilibili.auth import BilibiliCredential
 from bilibili.client import BiliApiError
 from music_assistant_models.config_entries import ProviderConfig
@@ -331,7 +331,9 @@ async def test_get_stream_details_returns_realtime_radio_stream() -> None:
     assert details.can_seek is False
     assert details.allow_seek is False
     assert details.expiration == 300
-    assert any("live.bilibili.com" in arg for arg in details.extra_input_args)
+    # The live CDN is picky about the referer; assert the exact header list the
+    # provider hands to MA (and therefore to ffmpeg).
+    assert details.extra_input_args == list(constants.FFMPEG_LIVE_HEADERS)
     assert client.play_calls == ["7734200"]
 
 
