@@ -11,6 +11,10 @@ BILI_API: Final = "https://api.bilibili.com"
 BILI_PASSPORT: Final = "https://passport.bilibili.com"
 BILI_REFERER: Final = "https://www.bilibili.com"
 
+# Live streams live on their own host and only accept a live-room referer.
+BILI_LIVE_API: Final = "https://api.live.bilibili.com"
+BILI_LIVE_REFERER: Final = "https://live.bilibili.com"
+
 # A desktop UA is required by several endpoints and by the audio CDN.
 USER_AGENT: Final = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -99,6 +103,33 @@ FFMPEG_HEADERS: Final = [
     "-headers",
     (f"Referer: {BILI_REFERER}\r\nOrigin: {BILI_REFERER}\r\nUser-Agent: {USER_AGENT}\r\n"),
 ]
+
+#: Live CDNs are picky about the referer; the live site must be used instead.
+FFMPEG_LIVE_HEADERS: Final = [
+    "-headers",
+    (
+        f"Referer: {BILI_LIVE_REFERER}/\r\n"
+        f"Origin: {BILI_LIVE_REFERER}\r\n"
+        f"User-Agent: {USER_AGENT}\r\n"
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# live streams
+# ---------------------------------------------------------------------------
+#: Live room item ids are prefixed so they can never collide with a bvid/av id.
+LIVE_ITEM_PREFIX: Final = "live:"
+
+#: Live room titles/ids longer than this are not worth a request.
+LIVE_ROOM_ID_MAX_LENGTH: Final = 10
+
+#: ``live_status`` values returned by ``/room/v1/Room/get_info``.
+LIVE_STATUS_OFFLINE: Final = 0
+LIVE_STATUS_LIVE: Final = 1
+LIVE_STATUS_ROUND: Final = 2
+
+#: A live URL carries an ``expires`` signature; re-resolve well before it runs out.
+LIVE_STREAM_EXPIRATION: Final = 300
 
 # ---------------------------------------------------------------------------
 # title noise

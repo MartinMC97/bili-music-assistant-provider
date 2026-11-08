@@ -15,6 +15,7 @@
 | `provider/bilibili/parsers.py` | agent-parsers | dict → MA 模型 |
 | `provider/bilibili/setup_flow.py` | agent-auth | 二维码/手填/匿名流程 |
 | `provider/bilibili/catalog.py` | agent-catalog | 收藏夹、推荐、browse 辅助函数 |
+| `provider/bilibili/live.py` | lead | 直播间：房间号解析、取流、实时电台 StreamDetails |
 | `provider/bilibili/__init__.py` | agent-provider | provider 类与 feature 方法 |
 | `tests/unit/*` | 各自模块作者 + agent-tests | 单元测试 |
 | `docker/*`、`scripts/*`、`README.md` | lead | 环境与分发 |
@@ -30,6 +31,7 @@ wbi.py         （无 MA import）
 client.py      → auth, constants
 parsers.py     → constants, music_assistant_models
 catalog.py     → client, parsers, constants, music_assistant_models
+live.py        → client, parsers, constants, music_assistant_models
 setup_flow.py  → auth, client, constants, music_assistant.models.setup_flow
 __init__.py    → 以上全部 + music_assistant.models.music_provider
 ```

@@ -43,5 +43,10 @@
       "title": "二维码已过期",
       "description": "请重新获取二维码。"
     }
+  },
+  "errors": {
+    "live_room_not_live": "直播间当前未开播或处于轮播状态（{0}）",
+    "live_room_protected": "该直播间需要密码或付费，暂不支持播放",
+    "live_room_unplayable": "直播间暂未返回可播放的音频流"
   }
 }

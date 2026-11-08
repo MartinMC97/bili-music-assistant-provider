@@ -42,6 +42,7 @@ from music_assistant_models.media_items import (
     MediaItemType,
     Playlist,
     ProviderMapping,
+    Radio,
     RecommendationFolder,
     SearchResults,
     Track,
@@ -49,7 +50,7 @@ from music_assistant_models.media_items import (
 )
 from music_assistant_models.streamdetails import StreamDetails
 
-from . import catalog, constants, parsers
+from . import catalog, constants, live, parsers
 from .auth import BilibiliCredential
 from .client import AudioStream, BiliApiError, BilibiliClient
 from .compat import check_compat
@@ -93,7 +94,7 @@ _VIEW_CACHE_MAX: Final = 256
 _SEARCH_PAGE_SIZE_MIN: Final = 20
 _SEARCH_PAGE_SIZE_MAX: Final = 50
 
-_TRACK_MEDIA_TYPE_ERROR: Final = "Bilibili can only stream tracks, not {media_type}"
+_TRACK_MEDIA_TYPE_ERROR: Final = "Bilibili can only stream tracks and live rooms, not {media_type}"
 
 
 async def setup(
@@ -710,12 +711,27 @@ class BilibiliProvider(MusicProvider):
         media_types: list[MediaType],
         limit: int = 5,
     ) -> SearchResults:
-        """Search Bilibili videos for the track media type."""
-        if MediaType.TRACK not in media_types:
-            return SearchResults()
+        """Search Bilibili videos for tracks and explicitly addressed live rooms.
 
+        Live rooms are opt-in: only ``BLIVE:<room id>`` or a ``live.bilibili.com``
+        URL turns the query into a radio result, and that result is returned in
+        the radio section only.  A bare number stays a music search, so live
+        content never mixes into music results.
+        """
         query = str(search_query or "").strip()
         if not query:
+            return SearchResults()
+
+        room_id = live.room_id_from_query(query)
+        if room_id is not None:
+            # An explicit live query must never fall back to a music search: the
+            # user asked for that room, so an unknown room simply has no result.
+            if MediaType.RADIO not in media_types:
+                return SearchResults()
+            room = await live.find_room(self._require_client(), self.instance_id, room_id)
+            return SearchResults(radio=[room] if room is not None else [])
+
+        if MediaType.TRACK not in media_types:
             return SearchResults()
 
         if _VIDEO_ID_RE.fullmatch(query):
@@ -816,11 +832,19 @@ class BilibiliProvider(MusicProvider):
             },
         )
 
+    async def get_radio(self, prov_radio_id: str) -> Radio:
+        """Return a live room as a radio item (``live:<room_id>``)."""
+        return await live.get_room(self._require_client(), self.instance_id, prov_radio_id)
+
     # ------------------------------------------------------------------
     # playback
     # ------------------------------------------------------------------
     async def get_stream_details(self, item_id: str, media_type: MediaType) -> StreamDetails:
-        """Resolve the best playable audio stream for a Bilibili track."""
+        """Resolve the best playable audio stream for a Bilibili track or live room."""
+        if media_type == MediaType.RADIO:
+            return await live.get_stream_details(
+                self._require_client(), self.instance_id, item_id
+            )
         if media_type != MediaType.TRACK:
             raise MediaNotFoundError(_TRACK_MEDIA_TYPE_ERROR.format(media_type=media_type))
 

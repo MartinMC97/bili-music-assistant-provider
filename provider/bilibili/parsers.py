@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import html
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Final
 
 from music_assistant_models.enums import ImageType, LinkType
 from music_assistant_models.media_items import (
@@ -20,11 +21,19 @@ from music_assistant_models.media_items import (
     MediaItemMetadata,
     Playlist,
     ProviderMapping,
+    Radio,
     Track,
     UniqueList,
 )
 
-from .constants import NOISE_PATTERNS, PROVIDER_DOMAIN
+from .constants import (
+    LIVE_ITEM_PREFIX,
+    LIVE_STATUS_LIVE,
+    LIVE_STATUS_OFFLINE,
+    LIVE_STATUS_ROUND,
+    NOISE_PATTERNS,
+    PROVIDER_DOMAIN,
+)
 
 BILIBILI_WEB = "https://www.bilibili.com"
 VIDEO_URL = f"{BILIBILI_WEB}/video/{{video_id}}"
@@ -485,3 +494,180 @@ def parse_ranking_item(item: dict[str, Any], provider_instance: str) -> Track | 
     if not isinstance(item, dict):
         return None
     return _parse_video_item(item, provider_instance)
+
+
+# ---------------------------------------------------------------------------
+# live rooms
+# ---------------------------------------------------------------------------
+LIVE_ROOM_URL = "https://live.bilibili.com/{room_id}"
+
+#: Suffix appended to the room title so the state is visible in the search
+#: result, where only the name is rendered (not the description).
+_LIVE_STATUS_SUFFIX: Final = {
+    LIVE_STATUS_ROUND: "（轮播）",
+    LIVE_STATUS_OFFLINE: "（未开播）",
+}
+
+#: Protocol/format/codec preference for live playback. FLV over HTTP is the
+#: most predictable input for ffmpeg; HLS is the fallback.
+_LIVE_FORMAT_RANK: Final = {
+    ("http_stream", "flv", "avc"): 0,
+    ("http_hls", "ts", "avc"): 10,
+    ("http_hls", "fmp4", "avc"): 20,
+}
+_LIVE_CODEC_PENALTY: Final = {"avc": 0, "hevc": 5}
+
+
+@dataclass(slots=True)
+class LiveStream:
+    """One playable live stream URL plus its fallbacks."""
+
+    url: str
+    backups: list[str]
+    protocol: str
+    format: str
+    codec: str
+    qn: int
+
+
+def parse_live_room(data: dict[str, Any], provider_instance: str) -> Radio | None:
+    """Build a :class:`Radio` item from a ``Room/get_info`` ``data`` object.
+
+    ``None`` is returned for payloads without a usable room id so callers can
+    treat a malformed response as "no such room" instead of raising.
+    """
+    if not isinstance(data, dict):
+        return None
+    room_id = _text(data.get("room_id"))
+    if not room_id.isdigit():
+        return None
+
+    title = extract_em_tags(_text(data.get("title")))
+    item_id = f"{LIVE_ITEM_PREFIX}{room_id}"
+    url = LIVE_ROOM_URL.format(room_id=room_id)
+
+    details = [part for part in (_text(data.get("parent_area_name")), _text(data.get("area_name"))) if part]
+    status = _as_int(data.get("live_status"))
+    state_suffix = _LIVE_STATUS_SUFFIX.get(
+        status if status is not None else LIVE_STATUS_OFFLINE, ""
+    )
+    if bool(data.get("encrypted")):
+        state_suffix = "（密码房）"
+    name = f"{title or f'直播间 {room_id}'}{state_suffix}"
+    status_text = {
+        LIVE_STATUS_LIVE: "直播中",
+        LIVE_STATUS_ROUND: "轮播",
+        LIVE_STATUS_OFFLINE: "未开播",
+    }.get(status if status is not None else LIVE_STATUS_OFFLINE, "未知状态")
+    details.append(status_text)
+    # Only a room that is actually live can be played. Marking it here keeps the
+    # Music Assistant UI from offering playback for offline/round-play rooms and
+    # password protected rooms, instead of failing after the user pressed play.
+    playable = status == LIVE_STATUS_LIVE and not bool(data.get("encrypted"))
+
+    image = None
+    for key in ("cover", "keyframe", "user_cover"):
+        image = _image(data.get(key), provider_instance)
+        if image is not None:
+            break
+
+    metadata = MediaItemMetadata(
+        description=" · ".join(details) or None,
+        images=UniqueList([image]) if image is not None else None,
+        links={MediaItemLink(type=LinkType.WEBSITE, url=url)},
+    )
+
+    return Radio(
+        item_id=item_id,
+        provider=provider_instance,
+        name=name,
+        is_playable=playable,
+        metadata=metadata,
+        provider_mappings={
+            ProviderMapping(
+                item_id=item_id,
+                provider_domain=PROVIDER_DOMAIN,
+                provider_instance=provider_instance,
+                available=True,
+                url=url,
+            )
+        },
+    )
+
+
+def _live_stream_rank(stream: dict[str, Any], format_info: dict[str, Any]) -> int:
+    """Rank one protocol/format combination, lower is better."""
+    protocol = _text(stream.get("protocol_name"))
+    format_name = _text(format_info.get("format_name"))
+    codecs = format_info.get("codec") or []
+    codec_name = _text((codecs[0] or {}).get("codec_name")) if codecs else ""
+    rank = _LIVE_FORMAT_RANK.get((protocol, format_name, codec_name), 100)
+    return rank + _LIVE_CODEC_PENALTY.get(codec_name, 10)
+
+
+def _live_url(reference: Any, base_url: Any) -> str:
+    """Join a ``url_info`` entry into a complete signed stream URL."""
+    if not isinstance(reference, dict):
+        return ""
+    host = _text(reference.get("host")).rstrip("/")
+    base = _text(base_url)
+    if not host or not base:
+        return ""
+    return to_https(f"{host}{base}{_text(reference.get('extra'))}")
+
+
+def pick_live_stream(data: dict[str, Any]) -> LiveStream | None:
+    """Return the preferred playable live stream from a ``getRoomPlayInfo`` payload.
+
+    Bilibili only offers muxed (video + audio) renditions for live rooms, so the
+    caller relies on ffmpeg to keep the audio track only.
+    """
+    if not isinstance(data, dict):
+        return None
+    playurl_info = data.get("playurl_info")
+    if not isinstance(playurl_info, dict):
+        return None
+    playurl = playurl_info.get("playurl")
+    if not isinstance(playurl, dict):
+        return None
+
+    candidates: list[tuple[int, dict[str, Any], dict[str, Any], dict[str, Any]]] = []
+    for stream in playurl.get("stream") or []:
+        if not isinstance(stream, dict):
+            continue
+        for format_info in stream.get("format") or []:
+            if not isinstance(format_info, dict):
+                continue
+            for codec in format_info.get("codec") or []:
+                if not isinstance(codec, dict):
+                    continue
+                # Rank by the codec actually served, not the first declared one.
+                key = (
+                    _text(stream.get("protocol_name")),
+                    _text(format_info.get("format_name")),
+                    _text(codec.get("codec_name")),
+                )
+                rank = _LIVE_FORMAT_RANK.get(key, 100) + _LIVE_CODEC_PENALTY.get(key[2], 10)
+                candidates.append((rank, stream, format_info, codec))
+
+    for _, stream, format_info, codec in sorted(candidates, key=lambda item: item[0]):
+        references = codec.get("url_info") or []
+        if not references:
+            continue
+        primary = _live_url(references[0], codec.get("base_url"))
+        if not primary:
+            continue
+        backups = [
+            url
+            for reference in references[1:]
+            if (url := _live_url(reference, codec.get("base_url")))
+        ]
+        return LiveStream(
+            url=primary,
+            backups=backups,
+            protocol=_text(stream.get("protocol_name")),
+            format=_text(format_info.get("format_name")),
+            codec=_text(codec.get("codec_name")),
+            qn=_as_int(codec.get("current_qn")) or 0,
+        )
+    return None
