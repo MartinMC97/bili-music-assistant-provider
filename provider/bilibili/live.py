@@ -152,12 +152,17 @@ async def get_stream_details(
     live_status = _live_status(info)
     if live_status != constants.LIVE_STATUS_LIVE:
         state = _status_text(live_status)
-        raise MediaNotFoundError(
-            f"Bilibili live room {room_id} is not live right now（当前状态：{state}）"
+        raise UnplayableMediaError(
+            f"Bilibili live room {room_id} is not live right now（当前状态：{state}）",
+            translation_key="live_room_not_live",
+            translation_args=[state],
+            translation_owner=f"provider.{constants.PROVIDER_DOMAIN}",
         )
     if isinstance(info, dict) and info.get("encrypted") and not info.get("pwd_verified"):
         raise UnplayableMediaError(
-            f"Bilibili live room {room_id} is password protected or paid-only"
+            f"Bilibili live room {room_id} is password protected or paid-only",
+            translation_key="live_room_protected",
+            translation_owner=f"provider.{constants.PROVIDER_DOMAIN}",
         )
 
     try:
@@ -169,7 +174,9 @@ async def get_stream_details(
     if stream is None:
         raise UnplayableMediaError(
             f"Bilibili live room {room_id} did not return a playable stream "
-            "(the room may require login or paid access)"
+            "(the room may require login or paid access)",
+            translation_key="live_room_unplayable",
+            translation_owner=f"provider.{constants.PROVIDER_DOMAIN}",
         )
 
     return StreamDetails(

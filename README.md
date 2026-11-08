@@ -24,7 +24,16 @@
 
 返回的条目是一个 **Radio**，在 Music Assistant 里出现在搜索结果的「电台」分区，点开即播放实时音频。
 
-未开播 / 轮播 / 密码房的条目仍然会出现在结果里（标题后面带「未开播」等状态说明），但会被标记为**不可播放**：MA 前端不会显示播放按钮、条目显示为灰色，不会出现「点了播放却报错」的情况。
+未开播 / 轮播 / 密码房的条目仍然会出现在结果里，并且**名字后面直接带状态**：`看会儿KPL（未开播）`、`（轮播）`、`（密码房）`。这类条目同时标记为 `is_playable=False`。
+
+如果仍然点了播放，MA 会弹一条失败提示（`Play action failed` + 系统级原因），但**不会显示「未开播」这种具体原因**——因为 MA 的播放队列层会把 provider 的异常改写成「媒体不可用/找不到」，具体原因只写在 MA 日志里：
+
+```text
+WARNING (streams.audio) Bilibili live room 21452505 is not live right now（当前状态：未开播）
+ERROR   (player_queues) Playback failed for 看会儿KPL（未开播） - no more tracks available
+```
+
+所以判断依据以条目名字里的状态后缀为准，不要等点播报错。
 
 已知限制（直播本身的，不是实现缺陷）：
 

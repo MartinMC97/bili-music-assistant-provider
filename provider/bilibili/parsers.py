@@ -501,6 +501,13 @@ def parse_ranking_item(item: dict[str, Any], provider_instance: str) -> Track | 
 # ---------------------------------------------------------------------------
 LIVE_ROOM_URL = "https://live.bilibili.com/{room_id}"
 
+#: Suffix appended to the room title so the state is visible in the search
+#: result, where only the name is rendered (not the description).
+_LIVE_STATUS_SUFFIX: Final = {
+    LIVE_STATUS_ROUND: "（轮播）",
+    LIVE_STATUS_OFFLINE: "（未开播）",
+}
+
 #: Protocol/format/codec preference for live playback. FLV over HTTP is the
 #: most predictable input for ffmpeg; HLS is the fallback.
 _LIVE_FORMAT_RANK: Final = {
@@ -536,12 +543,17 @@ def parse_live_room(data: dict[str, Any], provider_instance: str) -> Radio | Non
         return None
 
     title = extract_em_tags(_text(data.get("title")))
-    name = title or f"直播间 {room_id}"
     item_id = f"{LIVE_ITEM_PREFIX}{room_id}"
     url = LIVE_ROOM_URL.format(room_id=room_id)
 
     details = [part for part in (_text(data.get("parent_area_name")), _text(data.get("area_name"))) if part]
     status = _as_int(data.get("live_status"))
+    state_suffix = _LIVE_STATUS_SUFFIX.get(
+        status if status is not None else LIVE_STATUS_OFFLINE, ""
+    )
+    if bool(data.get("encrypted")):
+        state_suffix = "（密码房）"
+    name = f"{title or f'直播间 {room_id}'}{state_suffix}"
     status_text = {
         LIVE_STATUS_LIVE: "直播中",
         LIVE_STATUS_ROUND: "轮播",

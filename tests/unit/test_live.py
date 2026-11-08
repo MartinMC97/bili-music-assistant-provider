@@ -27,7 +27,7 @@ from music_assistant_models.enums import (
     ProviderType,
     StreamType,
 )
-from music_assistant_models.errors import MediaNotFoundError, UnplayableMediaError
+from music_assistant_models.errors import UnplayableMediaError
 
 PROVIDER = "bilibili_live_test"
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -214,19 +214,24 @@ def test_parse_live_room_builds_radio() -> None:
 
 
 def test_parse_live_room_marks_offline_room_unplayable() -> None:
-    """Offline, round-play and protected rooms are flagged so the UI offers no play."""
-    for live_status in (0, 2):
+    """Offline and round-play rooms are unplayable and carry the state in the name."""
+    for live_status, suffix in ((0, "（未开播）"), (2, "（轮播）")):
         data = room_info()
         data["live_status"] = live_status
         radio = parsers.parse_live_room(data, PROVIDER)
         assert radio is not None
         assert radio.is_playable is False
+        assert radio.name.endswith(suffix)
 
+
+def test_parse_live_room_marks_protected_room_unplayable() -> None:
+    """A password protected room is unplayable and says so in the name."""
     protected = room_info()
     protected["encrypted"] = True
     radio = parsers.parse_live_room(protected, PROVIDER)
     assert radio is not None
     assert radio.is_playable is False
+    assert radio.name.endswith("（密码房）")
 
 
 def test_parse_live_room_rejects_payload_without_room_id() -> None:
@@ -338,13 +343,16 @@ async def test_get_stream_details_returns_realtime_radio_stream() -> None:
 
 
 async def test_get_stream_details_rejects_offline_room() -> None:
-    """An offline room (or its replay loop) is not streamable."""
+    """An offline room (or its replay loop) is reported as unplayable, not missing."""
     info = room_info()
     info["live_status"] = 0
     provider = await make_provider(FakeClient(info=info))
 
-    with pytest.raises(MediaNotFoundError):
+    with pytest.raises(UnplayableMediaError) as excinfo:
         await provider.get_stream_details("live:7734200", MediaType.RADIO)
+
+    assert excinfo.value.translation_key == "live_room_not_live"
+    assert excinfo.value.translation_owner == "provider.bilibili"
 
 
 async def test_get_stream_details_rejects_room_without_streams() -> None:
