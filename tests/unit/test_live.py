@@ -161,20 +161,26 @@ async def make_provider(client: FakeClient) -> BilibiliProvider:
 @pytest.mark.parametrize(
     ("query", "expected"),
     [
-        ("6", "6"),
-        ("  21452505 ", "21452505"),
-        ("live:6", "6"),
+        ("BLIVE:21452505", "21452505"),
+        ("blive:6", "6"),
+        ("  BLIVE: 6  ", "6"),
         ("https://live.bilibili.com/6?broadcast_type=0", "6"),
         ("https://live.bilibili.com/h5/21452505", "21452505"),
-        ("12345678901", None),  # too long to be a room number
+        # Music Assistant strips "/" from search queries before providers see them.
+        ("https:  live.bilibili.com 21452505", "21452505"),
+        ("live.bilibili.com 6", "6"),
+        # A bare number is far too ambiguous for a song title: music search only.
+        ("6", None),
+        ("21452505", None),
+        ("BLIVE:12345678901", None),  # too long to be a room id
+        ("BLIVE:abc", None),
         ("周杰伦", None),
         ("BV1xx411c7mD", None),
-        ("live:abc", None),
         ("", None),
     ],
 )
 def test_room_id_from_query(query: str, expected: str | None) -> None:
-    """Only room numbers and live URLs are treated as live queries."""
+    """Only BLIVE: prefixed ids and live URLs are treated as live queries."""
     assert live.room_id_from_query(query) == expected
 
 
@@ -199,11 +205,28 @@ def test_parse_live_room_builds_radio() -> None:
     assert radio.provider == PROVIDER
     assert radio.name == "【预告】9号6点BLG vs T1"
     assert radio.media_type == MediaType.RADIO
+    assert radio.is_playable is True
     assert "直播中" in (radio.metadata.description or "")
     assert "赛事" in (radio.metadata.description or "")
     assert radio.metadata.images[0].path.startswith("https://i0.hdslb.com/")
     mapping = next(iter(radio.provider_mappings))
     assert mapping.url == "https://live.bilibili.com/7734200"
+
+
+def test_parse_live_room_marks_offline_room_unplayable() -> None:
+    """Offline, round-play and protected rooms are flagged so the UI offers no play."""
+    for live_status in (0, 2):
+        data = room_info()
+        data["live_status"] = live_status
+        radio = parsers.parse_live_room(data, PROVIDER)
+        assert radio is not None
+        assert radio.is_playable is False
+
+    protected = room_info()
+    protected["encrypted"] = True
+    radio = parsers.parse_live_room(protected, PROVIDER)
+    assert radio is not None
+    assert radio.is_playable is False
 
 
 def test_parse_live_room_rejects_payload_without_room_id() -> None:
@@ -232,17 +255,29 @@ def test_pick_live_stream_returns_none_without_playurl() -> None:
 # ---------------------------------------------------------------------------
 # provider wiring
 # ---------------------------------------------------------------------------
-async def test_search_room_number_returns_radio_only() -> None:
-    """A room number yields one radio result and never triggers a music search."""
+async def test_search_prefixed_room_returns_radio_only() -> None:
+    """A BLIVE: query yields one radio result and never triggers a music search."""
     client = FakeClient()
     provider = await make_provider(client)
 
-    results = await provider.search("6", [MediaType.TRACK, MediaType.RADIO], limit=5)
+    results = await provider.search("BLIVE:6", [MediaType.TRACK, MediaType.RADIO], limit=5)
 
     assert results.tracks == []
     assert [item.item_id for item in results.radio] == ["live:7734200"]
     assert client.info_calls == ["6"]
     assert client.search_calls == []
+
+
+async def test_search_bare_number_stays_music() -> None:
+    """A bare number is ambiguous and must never reach the live API."""
+    client = FakeClient()
+    provider = await make_provider(client)
+
+    results = await provider.search("6", [MediaType.TRACK, MediaType.RADIO])
+
+    assert results.radio == []
+    assert client.info_calls == []
+    assert client.search_calls == ["6"]
 
 
 async def test_search_music_query_never_calls_live_api() -> None:
@@ -257,26 +292,28 @@ async def test_search_music_query_never_calls_live_api() -> None:
     assert client.search_calls == ["周杰伦"]
 
 
-async def test_search_unknown_room_falls_back_to_music() -> None:
-    """A numeric query that is not a room still searches music."""
+async def test_search_unknown_prefixed_room_returns_nothing() -> None:
+    """An unknown room id is an empty radio result, not a fallback to music."""
     client = FakeClient(info_error=BiliApiError(1, "未找到该房间", "/room/v1/Room/get_info"))
     provider = await make_provider(client)
 
-    results = await provider.search("2024", [MediaType.TRACK, MediaType.RADIO])
+    results = await provider.search("BLIVE:2024", [MediaType.TRACK, MediaType.RADIO])
 
     assert results.radio == []
-    assert client.search_calls == ["2024"]
+    assert client.info_calls == ["2024"]
+    assert client.search_calls == []
 
 
-async def test_search_room_skipped_when_radio_not_requested() -> None:
+async def test_search_prefixed_room_skipped_when_radio_not_requested() -> None:
     """Without the radio media type the live API is not queried at all."""
     client = FakeClient()
     provider = await make_provider(client)
 
-    await provider.search("6", [MediaType.TRACK])
+    results = await provider.search("BLIVE:6", [MediaType.TRACK])
 
+    assert results.radio == []
     assert client.info_calls == []
-    assert client.search_calls == ["6"]
+    assert client.search_calls == []
 
 
 async def test_get_stream_details_returns_realtime_radio_stream() -> None:

@@ -4,7 +4,7 @@ Run inside the dev container (it has ffmpeg and the MA models):
 
     docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_live_stream.py
 
-The script walks the real provider path: ``search(<room number>)`` returns a
+The script walks the real provider path: ``search("BLIVE:<room id>")`` returns a
 radio item, ``get_stream_details`` resolves the muxed live FLV URL, and ffmpeg
 fetches/decode a few seconds with exactly the input arguments the provider hands
 to Music Assistant.  Only hosts and format details are printed, never the signed
@@ -32,8 +32,8 @@ from bilibili import BilibiliProvider  # noqa: E402
 from bilibili.auth import BilibiliCredential  # noqa: E402
 from bilibili.client import BilibiliClient  # noqa: E402
 
-#: A live room number or a full ``https://live.bilibili.com/<id>`` URL.
-ROOM_QUERY = sys.argv[1] if len(sys.argv) > 1 else "6"
+#: ``BLIVE:<room id>`` or a full ``https://live.bilibili.com/<id>`` URL.
+ROOM_QUERY = sys.argv[1] if len(sys.argv) > 1 else "BLIVE:6"
 LOG = logging.getLogger("e2e-live")
 
 

@@ -548,6 +548,10 @@ def parse_live_room(data: dict[str, Any], provider_instance: str) -> Radio | Non
         LIVE_STATUS_OFFLINE: "未开播",
     }.get(status if status is not None else LIVE_STATUS_OFFLINE, "未知状态")
     details.append(status_text)
+    # Only a room that is actually live can be played. Marking it here keeps the
+    # Music Assistant UI from offering playback for offline/round-play rooms and
+    # password protected rooms, instead of failing after the user pressed play.
+    playable = status == LIVE_STATUS_LIVE and not bool(data.get("encrypted"))
 
     image = None
     for key in ("cover", "keyframe", "user_cover"):
@@ -565,6 +569,7 @@ def parse_live_room(data: dict[str, Any], provider_instance: str) -> Radio | Non
         item_id=item_id,
         provider=provider_instance,
         name=name,
+        is_playable=playable,
         metadata=metadata,
         provider_mappings={
             ProviderMapping(

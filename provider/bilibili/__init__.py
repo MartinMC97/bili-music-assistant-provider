@@ -711,20 +711,25 @@ class BilibiliProvider(MusicProvider):
         media_types: list[MediaType],
         limit: int = 5,
     ) -> SearchResults:
-        """Search Bilibili videos for tracks and live rooms by room number.
+        """Search Bilibili videos for tracks and explicitly addressed live rooms.
 
-        Live rooms are opt-in: only a room number or a ``live.bilibili.com`` URL
-        turns the query into a radio result, and that result is returned in the
-        radio section only.  Ordinary music queries never reach the live API.
+        Live rooms are opt-in: only ``BLIVE:<room id>`` or a ``live.bilibili.com``
+        URL turns the query into a radio result, and that result is returned in
+        the radio section only.  A bare number stays a music search, so live
+        content never mixes into music results.
         """
         query = str(search_query or "").strip()
         if not query:
             return SearchResults()
 
-        if MediaType.RADIO in media_types:
-            room = await live.find_room(self._require_client(), self.instance_id, query)
-            if room is not None:
-                return SearchResults(radio=[room])
+        room_id = live.room_id_from_query(query)
+        if room_id is not None:
+            # An explicit live query must never fall back to a music search: the
+            # user asked for that room, so an unknown room simply has no result.
+            if MediaType.RADIO not in media_types:
+                return SearchResults()
+            room = await live.find_room(self._require_client(), self.instance_id, room_id)
+            return SearchResults(radio=[room] if room is not None else [])
 
         if MediaType.TRACK not in media_types:
             return SearchResults()

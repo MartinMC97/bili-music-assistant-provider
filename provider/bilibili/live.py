@@ -2,9 +2,10 @@
 
 Live rooms are exposed as :class:`~music_assistant_models.media_items.Radio`
 items.  They are deliberately kept out of the regular track search: only an
-explicit room number (``21452505``) or a live room URL turns a query into a
-radio result, so live streams never mix into music results, recommendations or
-the browse tree.
+explicitly prefixed query (``BLIVE:21452505``) or a live room URL turns a query
+into a radio result, so live streams never mix into music results,
+recommendations or the browse tree.  A bare number stays a music search because
+it is far too ambiguous for a song title.
 
 Bilibili does not publish an audio-only rendition for live rooms, so the
 provider hands the muxed FLV/HLS URL to ffmpeg and lets it keep the audio
@@ -32,7 +33,12 @@ from .client import BiliApiError
 if TYPE_CHECKING:
     from .client import BilibiliClient
 
-_ROOM_URL_RE = re.compile(r"live\.bilibili\.com/(?:h5/)?(\d{1,10})", re.IGNORECASE)
+#: Explicit query prefix, e.g. ``BLIVE:21452505``.
+_QUERY_PREFIX = "blive:"
+
+#: Live room URL.  Music Assistant strips "/" from a search string before it
+#: reaches a provider, so whitespace is accepted as separator as well.
+_ROOM_URL_RE = re.compile(r"live\.bilibili\.com[/\s]+(?:h5[/\s]+)?(\d{1,10})", re.IGNORECASE)
 _ITEM_ID_RE = re.compile(rf"^{re.escape(constants.LIVE_ITEM_PREFIX)}(\d{{1,10}})$")
 
 #: ``/room/v1/Room/get_info`` answers code ``1`` for unknown or malformed rooms.
@@ -43,9 +49,11 @@ _RISK_CONTROL_CODE: int = -352
 
 
 def room_id_from_query(query: str) -> str | None:
-    """Return the room id when *query* is a room number or a live room URL.
+    """Return the room id when *query* explicitly addresses a live room.
 
     ``None`` means the query is an ordinary music search and must be left alone.
+    A bare number is **not** a live query: ``BLIVE:`` prefix or a full live room
+    URL is required.
     """
     text = str(query or "").strip()
     if not text:
@@ -55,11 +63,10 @@ def room_id_from_query(query: str) -> str | None:
     if match:
         return match.group(1)
 
-    if text.startswith(constants.LIVE_ITEM_PREFIX):
-        text = text[len(constants.LIVE_ITEM_PREFIX) :]
-
-    if text.isdigit() and len(text) <= constants.LIVE_ROOM_ID_MAX_LENGTH:
-        return text
+    if text.lower().startswith(_QUERY_PREFIX):
+        candidate = text[len(_QUERY_PREFIX) :].strip()
+        if candidate.isdigit() and len(candidate) <= constants.LIVE_ROOM_ID_MAX_LENGTH:
+            return candidate
     return None
 
 
@@ -85,17 +92,13 @@ def _translate_error(err: BiliApiError, room_id: str) -> Exception:
 async def find_room(
     client: BilibiliClient,
     provider_instance: str,
-    query: str,
+    room_id: str,
 ) -> Radio | None:
-    """Return the live room for *query*, or ``None`` when it is not a room query.
+    """Return the live room for *room_id*, or ``None`` when the room is unknown.
 
-    An unknown room also yields ``None`` so the caller can fall back to the
-    regular music search (e.g. a numeric-looking song title).
+    Callers must gate this behind :func:`room_id_from_query`: an ordinary music
+    query has to stay a music search.
     """
-    room_id = room_id_from_query(query)
-    if room_id is None:
-        return None
-
     try:
         data = await client.live_room_info(room_id)
     except BiliApiError as err:
@@ -150,7 +153,11 @@ async def get_stream_details(
     if live_status != constants.LIVE_STATUS_LIVE:
         state = _status_text(live_status)
         raise MediaNotFoundError(
-            f"Bilibili live room {room_id} is not live right now（{state}）"
+            f"Bilibili live room {room_id} is not live right now（当前状态：{state}）"
+        )
+    if isinstance(info, dict) and info.get("encrypted") and not info.get("pwd_verified"):
+        raise UnplayableMediaError(
+            f"Bilibili live room {room_id} is password protected or paid-only"
         )
 
     try:
