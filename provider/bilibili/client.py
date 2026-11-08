@@ -33,6 +33,8 @@ _SERVER_BACKOFF: Final = 30
 
 _SEARCH_PATH: Final = "/x/web-interface/wbi/search/type"
 _NAV_PATH: Final = "/x/web-interface/nav"
+_LIVE_ROOM_INFO_PATH: Final = "/room/v1/Room/get_info"
+_LIVE_PLAYURL_PATH: Final = "/xlive/web-room/v2/index/getRoomPlayInfo"
 
 
 class BiliApiError(Exception):
@@ -167,11 +169,11 @@ class BilibiliClient:
     async def close(self) -> None:
         """Do nothing: ``mass.http_session`` is shared and outlives the provider."""
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, referer: str = constants.BILI_REFERER) -> dict[str, str]:
         """Build request headers, adding the credential cookie when logged in."""
         headers = {
-            "Referer": constants.BILI_REFERER,
-            "Origin": constants.BILI_REFERER,
+            "Referer": referer,
+            "Origin": referer,
             "User-Agent": constants.USER_AGENT,
             "Accept": "application/json, text/plain, */*",
         }
@@ -203,13 +205,18 @@ class BilibiliClient:
             url = f"{url}?{query}"
         return URL(url, encoded=True)
 
-    async def _fetch(self, url: URL, endpoint: str) -> tuple[dict[str, Any], dict[str, str]]:
+    async def _fetch(
+        self,
+        url: URL,
+        endpoint: str,
+        referer: str = constants.BILI_REFERER,
+    ) -> tuple[dict[str, Any], dict[str, str]]:
         """Perform one GET request and return the decoded payload and cookies."""
         # Never log the full URL: it contains search keywords and signatures.
         self.logger.debug("GET %s", endpoint)
         try:
             async with self.mass.http_session.get(
-                url, headers=self._headers(), timeout=_REQUEST_TIMEOUT
+                url, headers=self._headers(referer), timeout=_REQUEST_TIMEOUT
             ) as response:
                 status = int(getattr(response, "status", 200))
                 cookies = _response_cookies(response)
@@ -253,14 +260,15 @@ class BilibiliClient:
         *,
         allowed_codes: frozenset[int] = frozenset(),
         extra_throttler: Throttler | None = None,
+        referer: str = constants.BILI_REFERER,
     ) -> tuple[dict[str, Any], dict[str, str]]:
         """Get a JSON payload, enforcing throttling and the API ``code``."""
         if extra_throttler is None:
             async with self._api_throttler:
-                payload, cookies = await self._fetch(url, endpoint)
+                payload, cookies = await self._fetch(url, endpoint, referer)
         else:
             async with self._api_throttler, extra_throttler:
-                payload, cookies = await self._fetch(url, endpoint)
+                payload, cookies = await self._fetch(url, endpoint, referer)
 
         code = _coerce_int(payload.get("code"), 0)
         if code != 0 and code not in allowed_codes:
@@ -380,6 +388,33 @@ class BilibiliClient:
         endpoint = "/x/player/playurl"
         payload, _ = await self._request(
             self._build_url(constants.BILI_API, endpoint, params), endpoint
+        )
+        return _data(payload)
+
+    async def live_room_info(self, room_id: str) -> dict[str, Any]:
+        """Return the live room ``data`` object for a room id (short ids work too)."""
+        payload, _ = await self._request(
+            self._build_url(constants.BILI_LIVE_API, _LIVE_ROOM_INFO_PATH, {"room_id": room_id}),
+            _LIVE_ROOM_INFO_PATH,
+            referer=constants.BILI_LIVE_REFERER,
+        )
+        return _data(payload)
+
+    async def live_playurl(self, room_id: str) -> dict[str, Any]:
+        """Return the live play url payload (protocols, formats and codecs)."""
+        params: dict[str, object] = {
+            "room_id": room_id,
+            "protocol": "0,1",
+            "format": "0,1,2",
+            "codec": "0",
+            "qn": 10000,
+            "platform": "web",
+            "ptype": 8,
+        }
+        payload, _ = await self._request(
+            self._build_url(constants.BILI_LIVE_API, _LIVE_PLAYURL_PATH, params),
+            _LIVE_PLAYURL_PATH,
+            referer=constants.BILI_LIVE_REFERER,
         )
         return _data(payload)
 

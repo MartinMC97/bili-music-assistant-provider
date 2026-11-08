@@ -1,0 +1,99 @@
+{
+  "code": 0,
+  "message": "ok",
+  "ttl": 1,
+  "data": {
+    "room_id": 7734200,
+    "short_id": 6,
+    "uid": 50329118,
+    "live_status": 1,
+    "is_hidden": false,
+    "is_locked": false,
+    "is_portrait": false,
+    "encrypted": false,
+    "pwd_verified": false,
+    "live_time": "2026-10-15 15:50:15",
+    "playurl_info": {
+      "conf_json": "{}",
+      "playurl": {
+        "cid": 7734200,
+        "g_qn_desc": [
+          { "qn": 10000, "desc": "原画", "hdr_desc": "" },
+          { "qn": 250, "desc": "最低", "hdr_desc": "" }
+        ],
+        "stream": [
+          {
+            "protocol_name": "http_hls",
+            "format": [
+              {
+                "format_name": "ts",
+                "codec": [
+                  {
+                    "codec_name": "avc",
+                    "current_qn": 250,
+                    "accept_qn": [10000, 250],
+                    "base_url": "/live-bvc/966311/live_50329118_fixture.m3u8?",
+                    "url_info": [
+                      {
+                        "host": "https://d1--cn-hls.bilivideo.com",
+                        "extra": "expires=1700000000&sign=cafebabe&qn=250"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "protocol_name": "http_stream",
+            "format": [
+              {
+                "format_name": "flv",
+                "codec": [
+                  {
+                    "codec_name": "avc",
+                    "current_qn": 250,
+                    "accept_qn": [10000, 250],
+                    "base_url": "/live-bvc/132889/live_50329118_fixture.flv?",
+                    "url_info": [
+                      {
+                        "host": "https://d1--cn-flv.bilivideo.com",
+                        "extra": "expires=1700000000&sign=deadbeef&qn=250"
+                      },
+                      {
+                        "host": "https://d1--cn-flv-b.bilivideo.com",
+                        "extra": "expires=1700000000&sign=deadbeef&qn=250"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "protocol_name": "http_stream",
+            "format": [
+              {
+                "format_name": "flv",
+                "codec": [
+                  {
+                    "codec_name": "hevc",
+                    "current_qn": 250,
+                    "accept_qn": [10000, 250],
+                    "base_url": "/live-bvc/579202/live_50329118_fixture_hevc.flv?",
+                    "url_info": [
+                      {
+                        "host": "https://d1--cn-hevc.bilivideo.com",
+                        "extra": "expires=1700000000&sign=feedface&qn=250"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

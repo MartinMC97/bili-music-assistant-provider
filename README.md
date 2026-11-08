@@ -6,11 +6,29 @@
 
 - 搜索 B 站视频并映射为曲目（标题清洗、时长过滤、去重）
 - BV/av 直达搜索：搜索框输入完整 12 位 `BV...` 或 `av<数字>`，直接返回该视频的单条 Track（多 P 视频按分 P 播放暂未实现）
+- 直播音频（实验性）：搜索房间号或直播间链接即可播放（结果只出现在「电台」分区，不影响普通音乐搜索）
 - 播放 DASH 音轨（AAC / FLAC / Dolby，取决于账号权益）
 - 扫码登录 / 手填 SESSDATA / 匿名使用
 - 收藏夹同步（只读，需要登录；整夹分页已处理）
 - 榜单/新歌推荐与浏览
 - 不做歌词、不做 UP 主作品列表（接口被风控）
+
+## 直播音频（实验性）
+
+搜索框里**只有**下面两种输入会被当成直播，其余查询完全走普通音乐搜索，所以不会污染搜索结果、首页推荐或浏览树：
+
+- 纯房间号：`21452505`
+- 直播间链接：`https://live.bilibili.com/21452505`（带 `?` 参数也可以）
+
+返回的条目是一个 **Radio**，在 Music Assistant 里出现在搜索结果的「电台」分区，点开即播放实时音频。
+
+已知限制（直播本身的，不是实现缺陷）：
+
+- 只有 `直播中` 的房间能播；`轮播`/`未开播` 会提示未开播
+- B 站直播没有纯音频轨，实际拉的是「视频+音频」的 FLV，带宽约 0.8–1.2 Mbps（点播音频只要 ~128 kbps）
+- 不可拖动进度、无时长，播放结束由你手动停止（MA 按实时电台处理）
+- URL 有时效（约 5 分钟内会刷新一次），长时间播放由 MA 自动重新取流
+- MVP 阶段只做「按房间号搜索 → 播放」：不提供分区浏览、直播搜索、关注列表，也**不支持加入音乐库**
 
 ## 安装
 
@@ -116,7 +134,10 @@ docker compose -f docker/compose.dev.yml up -d
 docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python -m pytest -q
 docker exec -w /workspace bilibili-ma-dev /app/venv/bin/ruff check provider tests
 
-# 4. 真实播放 E2E（会访问 B 站 API/CDN）
+# 4. 直播 E2E：房间号 → 电台条目 → 取流 → ffmpeg 解码 3 秒（会访问 B 站 API/CDN）
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_live_stream.py 6
+
+# 5. 真实播放 E2E（会访问 B 站 API/CDN）
 docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_stream.py
 ```
 
