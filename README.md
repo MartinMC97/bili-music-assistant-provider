@@ -90,6 +90,9 @@ docker compose up -d
 
 provider 更新不影响 `/data`；MA 自己的数据库迁移会在启动时自动完成，升级前建议备份数据目录。
 
+> ⚠️ **2.10 与 2.11 的数据目录不兼容**（schema 58 vs 71，且没有回退迁移）。如果曾经用 `latest`/`main` 跑过 2.11 beta 镜像，再回到 2.10.x 会启动崩溃：`sqlite3.OperationalError: no such column: favorite`。
+> 处理办法见 **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**（`scripts/repair-library-schema.py` 可检查 / 修复 / 重置 library 数据库）。
+
 ## 目录
 
 ```text
