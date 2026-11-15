@@ -1,0 +1,43 @@
+{
+  "code": 0,
+  "message": "OK",
+  "ttl": 1,
+  "data": {
+    "items_lists": {
+      "page": {"page_num": 1, "page_size": 20, "total": 4},
+      "seasons_list": [
+        {
+          "archives": [],
+          "meta": {
+            "category": 0,
+            "cover": "https://archive.biliimg.com/bfs/archive/fixture-season-1.jpg",
+            "description": "雨夜备忘录系列",
+            "mid": 3546851714271831,
+            "name": "合集·「Chill Lofi Music」Lofi Rainy Night.🌧️雨夜备忘录（2016）",
+            "ptime": 1794740400,
+            "season_id": 7817533,
+            "total": 169,
+            "title": "「Chill Lofi Music」Lofi Rainy Night.🌧️雨夜备忘录（2016）"
+          },
+          "recent_aids": []
+        },
+        {
+          "archives": [],
+          "meta": {
+            "category": 0,
+            "cover": "https://archive.biliimg.com/bfs/archive/fixture-season-2.jpg",
+            "description": "",
+            "mid": 3546851714271831,
+            "name": "合集·「Chill Lofi Music」白噪声 无音乐 长时段 学习助眠通道",
+            "ptime": 1790000000,
+            "season_id": 6929179,
+            "total": 8,
+            "title": "「Chill Lofi Music」白噪声 无音乐 长时段 学习助眠通道"
+          },
+          "recent_aids": []
+        }
+      ],
+      "series_list": []
+    }
+  }
+}

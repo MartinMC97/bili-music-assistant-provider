@@ -1,0 +1,52 @@
+{
+  "code": 0,
+  "message": "OK",
+  "ttl": 1,
+  "data": {
+    "aids": [115123679206788, 115138929630963, 115146898806383],
+    "archives": [
+      {
+        "aid": 115123679206788,
+        "bvid": "BV1uVa5zXEyH",
+        "ctime": 1794740400,
+        "duration": 2650,
+        "pic": "https://i0.hdslb.com/bfs/archive/5139d66bfixture0.jpg",
+        "pubdate": 1794740400,
+        "stat": {"view": 558315},
+        "title": "🌧在水光夜色与温热灯火交界处🌧寻找内心的绝对安宁【Lofi /低保真】雨夜备忘录"
+      },
+      {
+        "aid": 115138929630963,
+        "bvid": "BV1pwa3zYENm",
+        "ctime": 1793963153,
+        "duration": 2720,
+        "pic": "https://i0.hdslb.com/bfs/archive/fixture1.jpg",
+        "pubdate": 1793963153,
+        "stat": {"view": 233117},
+        "title": "Lofi 8-bit/像素街机厅🌧️在霓虹倒影里重返旧日童话，收听时间倒流的低语"
+      },
+      {
+        "aid": 115146898806383,
+        "bvid": "BV1bZaUzSEom",
+        "ctime": 1793614588,
+        "duration": 2954,
+        "pic": "https://i0.hdslb.com/bfs/archive/fixture2.jpg",
+        "pubdate": 1793614588,
+        "stat": {"view": 190004},
+        "title": "【低保真音乐 / 废土夜雨】Chill Lofi Music-世界边缘的不眠地"
+      }
+    ],
+    "meta": {
+      "category": 0,
+      "cover": "https://archive.biliimg.com/bfs/archive/8b78a9dcefc39127cf14f35c798f6c3914fefa24.jpg",
+      "description": "感谢大家支持（Lofi music Jazz Hiphop Citypop Vaporwave）",
+      "mid": 3546851714271831,
+      "name": "合集·「Chill Lofi Music」Lofi Rainy Night.🌧️雨夜备忘录（2016）",
+      "ptime": 1794740400,
+      "season_id": 7817533,
+      "total": 169,
+      "title": "「Chill Lofi Music」Lofi Rainy Night.🌧️雨夜备忘录（2016）"
+    },
+    "page": {"page_num": 1, "page_size": 100, "total": 169}
+  }
+}

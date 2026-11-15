@@ -33,6 +33,9 @@ _SERVER_BACKOFF: Final = 30
 
 _SEARCH_PATH: Final = "/x/web-interface/wbi/search/type"
 _NAV_PATH: Final = "/x/web-interface/nav"
+_SPACE_COLLECTIONS_PATH: Final = "/x/polymer/web-space/seasons_series_list"
+_SEASON_ARCHIVES_PATH: Final = "/x/polymer/web-space/seasons_archives_list"
+_SPACE_CARD_PATH: Final = "/x/web-interface/card"
 
 
 class BiliApiError(Exception):
@@ -167,11 +170,11 @@ class BilibiliClient:
     async def close(self) -> None:
         """Do nothing: ``mass.http_session`` is shared and outlives the provider."""
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, referer: str = constants.BILI_REFERER) -> dict[str, str]:
         """Build request headers, adding the credential cookie when logged in."""
         headers = {
-            "Referer": constants.BILI_REFERER,
-            "Origin": constants.BILI_REFERER,
+            "Referer": referer,
+            "Origin": referer,
             "User-Agent": constants.USER_AGENT,
             "Accept": "application/json, text/plain, */*",
         }
@@ -203,13 +206,18 @@ class BilibiliClient:
             url = f"{url}?{query}"
         return URL(url, encoded=True)
 
-    async def _fetch(self, url: URL, endpoint: str) -> tuple[dict[str, Any], dict[str, str]]:
+    async def _fetch(
+        self,
+        url: URL,
+        endpoint: str,
+        referer: str = constants.BILI_REFERER,
+    ) -> tuple[dict[str, Any], dict[str, str]]:
         """Perform one GET request and return the decoded payload and cookies."""
         # Never log the full URL: it contains search keywords and signatures.
         self.logger.debug("GET %s", endpoint)
         try:
             async with self.mass.http_session.get(
-                url, headers=self._headers(), timeout=_REQUEST_TIMEOUT
+                url, headers=self._headers(referer), timeout=_REQUEST_TIMEOUT
             ) as response:
                 status = int(getattr(response, "status", 200))
                 cookies = _response_cookies(response)
@@ -253,14 +261,15 @@ class BilibiliClient:
         *,
         allowed_codes: frozenset[int] = frozenset(),
         extra_throttler: Throttler | None = None,
+        referer: str = constants.BILI_REFERER,
     ) -> tuple[dict[str, Any], dict[str, str]]:
         """Get a JSON payload, enforcing throttling and the API ``code``."""
         if extra_throttler is None:
             async with self._api_throttler:
-                payload, cookies = await self._fetch(url, endpoint)
+                payload, cookies = await self._fetch(url, endpoint, referer)
         else:
             async with self._api_throttler, extra_throttler:
-                payload, cookies = await self._fetch(url, endpoint)
+                payload, cookies = await self._fetch(url, endpoint, referer)
 
         code = _coerce_int(payload.get("code"), 0)
         if code != 0 and code not in allowed_codes:
@@ -380,6 +389,52 @@ class BilibiliClient:
         endpoint = "/x/player/playurl"
         payload, _ = await self._request(
             self._build_url(constants.BILI_API, endpoint, params), endpoint
+        )
+        return _data(payload)
+
+    async def space_collections(
+        self, mid: int, page: int = 1, page_size: int = 20
+    ) -> dict[str, Any]:
+        """Return an UP's collections and series payload (``items_lists``)."""
+        params = {"mid": int(mid), "page_num": max(int(page), 1), "page_size": page_size}
+        payload, _ = await self._request(
+            self._build_url(constants.BILI_API, _SPACE_COLLECTIONS_PATH, params),
+            _SPACE_COLLECTIONS_PATH,
+            referer=constants.BILI_SPACE_REFERER,
+        )
+        return _data(payload)
+
+    async def season_archives(
+        self,
+        season_id: int,
+        page: int = 1,
+        page_size: int = constants.COLLECTION_PAGE_SIZE,
+        sort_reverse: bool = False,
+    ) -> dict[str, Any]:
+        """Return one page of a collection's videos plus its metadata.
+
+        The endpoint also works without a ``mid`` (the response carries the
+        owner mid in ``meta.mid``), so a collection id alone is enough.
+        """
+        params: dict[str, object] = {
+            "season_id": int(season_id),
+            "page_num": max(int(page), 1),
+            "page_size": page_size,
+            "sort_reverse": "true" if sort_reverse else "false",
+        }
+        payload, _ = await self._request(
+            self._build_url(constants.BILI_API, _SEASON_ARCHIVES_PATH, params),
+            _SEASON_ARCHIVES_PATH,
+            referer=constants.BILI_SPACE_REFERER,
+        )
+        return _data(payload)
+
+    async def space_card(self, mid: int) -> dict[str, Any]:
+        """Return the public card payload of an UP (name, avatar, fans)."""
+        payload, _ = await self._request(
+            self._build_url(constants.BILI_API, _SPACE_CARD_PATH, {"mid": int(mid)}),
+            _SPACE_CARD_PATH,
+            referer=constants.BILI_SPACE_REFERER,
         )
         return _data(payload)
 

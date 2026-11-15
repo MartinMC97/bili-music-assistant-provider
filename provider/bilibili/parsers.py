@@ -24,7 +24,7 @@ from music_assistant_models.media_items import (
     UniqueList,
 )
 
-from .constants import NOISE_PATTERNS, PROVIDER_DOMAIN
+from .constants import COLLECTION_PLAYLIST_PREFIX, NOISE_PATTERNS, PROVIDER_DOMAIN
 
 BILIBILI_WEB = "https://www.bilibili.com"
 VIDEO_URL = f"{BILIBILI_WEB}/video/{{video_id}}"
@@ -257,8 +257,13 @@ def _build_track(
     aid: Any = None,
     pubdate: Any = None,
     date_added: Any = None,
+    clean_name: bool = True,
 ) -> Track:
-    """Assemble a Track from already-normalized fields."""
+    """Assemble a Track from already-normalized fields.
+
+    ``clean_name`` runs the song-title noise cleanup; collection entries pass
+    ``False`` because their editorial titles lose meaning when stripped.
+    """
     url = _video_url(bvid, aid)
     image = _image(cover, provider_instance)
     artist = _artist(author, mid, provider_instance)
@@ -276,7 +281,7 @@ def _build_track(
     return Track(
         item_id=item_id,
         provider=provider_instance,
-        name=clean_title(raw_title) or description or item_id,
+        name=(clean_title(raw_title) if clean_name else description) or item_id,
         duration=parse_duration(duration),
         artists=UniqueList([artist]) if artist is not None else UniqueList(),
         metadata=metadata,
@@ -485,3 +490,109 @@ def parse_ranking_item(item: dict[str, Any], provider_instance: str) -> Track | 
     if not isinstance(item, dict):
         return None
     return _parse_video_item(item, provider_instance)
+
+
+# ---------------------------------------------------------------------------
+# UP collections (合集 / UGC season)
+# ---------------------------------------------------------------------------
+COLLECTION_URL = "https://space.bilibili.com/{mid}/lists/{season_id}?type=season"
+UP_SPACE_URL = "https://space.bilibili.com/{mid}"
+
+
+def parse_collection(
+    meta: dict[str, Any],
+    provider_instance: str,
+    owner_name: str = "",
+) -> Playlist | None:
+    """Convert a collection ``meta`` object into a Playlist.
+
+    The payload is the ``meta`` block of ``seasons_archives_list`` or the
+    ``seasons_list[].meta`` block of ``seasons_series_list``; both share the
+    same fields.  ``None`` is returned for payloads without a usable season id.
+    """
+    if not isinstance(meta, dict):
+        return None
+    season_id = _text(meta.get("season_id"))
+    if not season_id.isdigit():
+        return None
+
+    raw_title = _text(meta.get("title")) or _text(meta.get("name"))
+    title = extract_em_tags(raw_title)
+    # Collection titles are editorial ("「Chill Lofi Music」…"); keep them as-is
+    # instead of running the song-title noise cleanup over them.
+    name = title or f"合集 {season_id}"
+    item_id = f"{COLLECTION_PLAYLIST_PREFIX}{season_id}"
+    mid = _text(meta.get("mid"))
+    url = COLLECTION_URL.format(mid=mid, season_id=season_id) if mid else None
+
+    image = _image(meta.get("cover"), provider_instance)
+    description = _text(meta.get("description")) or None
+    metadata = MediaItemMetadata(
+        description=description,
+        images=UniqueList([image]) if image is not None else None,
+        links={MediaItemLink(type=LinkType.WEBSITE, url=url)} if url else None,
+        release_date=_from_timestamp(meta.get("ptime")),
+    )
+
+    return Playlist(
+        item_id=item_id,
+        provider=provider_instance,
+        name=name,
+        owner=str(owner_name or ""),
+        is_editable=False,
+        metadata=metadata,
+        provider_mappings={
+            ProviderMapping(
+                item_id=item_id,
+                provider_domain=PROVIDER_DOMAIN,
+                provider_instance=provider_instance,
+                available=True,
+                url=url,
+            )
+        },
+    )
+
+
+def parse_collection_archive(
+    item: dict[str, Any],
+    provider_instance: str,
+    owner_name: str = "",
+    owner_mid: Any = None,
+) -> Track | None:
+    """Convert one collection archive entry into a Track.
+
+    Archives carry no cid; :meth:`BilibiliProvider.get_stream_details` resolves
+    it lazily from the view payload, exactly like search results do.
+    """
+    if not isinstance(item, dict):
+        return None
+    bvid = _text(item.get("bvid"))
+    raw_title = _text(item.get("title"))
+    if not bvid or not raw_title:
+        return None
+    stat = item.get("stat") if isinstance(item.get("stat"), dict) else {}
+    return _build_track(
+        item_id=bvid,
+        provider_instance=provider_instance,
+        raw_title=raw_title,
+        duration=item.get("duration"),
+        author=owner_name,
+        mid=owner_mid,
+        cover=item.get("pic"),
+        popularity=stat.get("view"),
+        bvid=bvid,
+        aid=item.get("aid"),
+        pubdate=item.get("pubdate"),
+        clean_name=False,
+    )
+
+
+def parse_up_card(data: dict[str, Any]) -> tuple[str, Any] | None:
+    """Return ``(name, mid)`` from a ``/x/web-interface/card`` payload."""
+    card = data.get("card") if isinstance(data, dict) else None
+    if not isinstance(card, dict):
+        return None
+    name = _text(card.get("name"))
+    if not name:
+        return None
+    return name, card.get("mid")

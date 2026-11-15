@@ -10,7 +10,28 @@
 - 扫码登录 / 手填 SESSDATA / 匿名使用
 - 收藏夹同步（只读，需要登录；整夹分页已处理）
 - 榜单/新歌推荐与浏览
-- 不做歌词、不做 UP 主作品列表（接口被风控）
+- UP 合集（合集/season）作为播放列表：`BSEASON:<id>`、合集链接、`UP:<mid>` 或 BV 反查
+- 不做歌词；UP 全量投稿列表接口风控严重（实测成功率很低），只支持 UP 的合集
+
+## UP 合集（合集 / season）
+
+B 站「合集」是 UP 主整理的一组视频（`ugc_season`），这里映射成 MA 的**播放列表**。和直播一样，**必须显式指定**，普通搜索不受影响：
+
+| 入口 | 说明 |
+|---|---|
+| `BSEASON:7817533` | 用合集 id 直接打开该合集 |
+| `https://space.bilibili.com/3546851714271831/lists/7817533?type=season` | 直接粘合集链接（`channel/collectiondetail?sid=` 也支持） |
+| `UP:3546851714271831`（或该 UP 的空间链接） | 列出这个 UP 的全部合集 |
+| 搜 `BV1FMsn6REhn` | 如果该视频属于某个合集，结果里会同时出现视频和它所在的合集 |
+
+合集在 MA 里出现在搜索结果的「播放列表」分区，点开即可看到分页好的完整视频列表（每页 100 条，一个 169 集的合集两页加载完）。
+
+已知限制：
+
+- 只做合集，不做「系列」（`type=series` 的列表不支持）和 UP 全量投稿；
+- 合集内容按原样播放：里面可能是几十分钟的长混音，不套用搜索页的 60–900 秒时长过滤；
+- 合集不会自动进 MA 曲库（provider playlist 机制），通过搜索/ID 打开即可播放；
+- 合集 id 是数字，**纯数字单独搜索不会被当成合集**，避免和歌名混淆（和 `BLIVE:` 的设计一致）。
 
 ## 安装
 
@@ -118,6 +139,9 @@ docker exec -w /workspace bilibili-ma-dev /app/venv/bin/ruff check provider test
 
 # 4. 真实播放 E2E（会访问 B 站 API/CDN）
 docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_stream.py
+
+# 5. 合集 E2E：BSEASON -> 播放列表 -> 分页 -> 取流 -> ffmpeg 解码
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_collections.py
 ```
 
 首次启动后访问 `http://localhost:18095` 创建管理员账号，然后在 Settings → Providers 里添加 **Bilibili**。
