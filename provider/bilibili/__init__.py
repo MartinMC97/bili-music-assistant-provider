@@ -49,7 +49,7 @@ from music_assistant_models.media_items import (
 )
 from music_assistant_models.streamdetails import StreamDetails
 
-from . import catalog, constants, parsers
+from . import catalog, collections, constants, parsers
 from .auth import BilibiliCredential
 from .client import AudioStream, BiliApiError, BilibiliClient
 from .compat import check_compat
@@ -342,6 +342,10 @@ class BilibiliProvider(MusicProvider):
         self._cdn_health: dict[str, tuple[bool, float]] = {}
         # playlist id -> (monotonic expiry, all playable tracks)
         self._fav_tracks_cache: dict[str, tuple[float, list[Track]]] = {}
+        # season id -> (monotonic expiry, collection meta payload)
+        self._collection_meta_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        # UP mid -> (monotonic expiry, display name)
+        self._up_name_cache: dict[str, tuple[float, str]] = {}
 
     # ------------------------------------------------------------------
     # lifecycle
@@ -702,6 +706,76 @@ class BilibiliProvider(MusicProvider):
         )
 
     # ------------------------------------------------------------------
+    # collections (合集 / UGC season)
+    # ------------------------------------------------------------------
+    async def _up_name(self, mid: Any) -> str:
+        """Return an UP display name (cached); empty when it cannot be resolved."""
+        key = str(mid or "").strip()
+        if not key.isdigit():
+            return ""
+        now = time.monotonic()
+        cached = self._up_name_cache.get(key)
+        if cached is not None and cached[0] > now:
+            return cached[1]
+        try:
+            card = await self._require_client().space_card(int(key))
+        except BiliApiError as err:
+            self.logger.debug("Could not resolve Bilibili UP %s: %s", key, err)
+            return ""
+        parsed = parsers.parse_up_card(card)
+        name = parsed[0] if parsed else ""
+        self._up_name_cache[key] = (now + constants.UP_PROFILE_TTL, name)
+        if name:
+            self._artist_names.setdefault(key, name)
+        return name
+
+    async def _collection_meta(self, season_id: str) -> dict[str, Any]:
+        """Return a collection's ``meta`` block, cached for a short while."""
+        now = time.monotonic()
+        cached = self._collection_meta_cache.get(season_id)
+        if cached is not None and cached[0] > now:
+            return cached[1]
+        meta = await collections.find_collection_meta(self._require_client(), season_id)
+        self._collection_meta_cache[season_id] = (now + constants.COLLECTION_META_TTL, meta)
+        return meta
+
+    async def _collection_playlist(self, season_id: str) -> Playlist:
+        """Build a Playlist for one collection."""
+        meta = await self._collection_meta(season_id)
+        owner = await self._up_name(meta.get("mid"))
+        playlist = parsers.parse_collection(meta, self.instance_id, owner)
+        if playlist is None:
+            raise MediaNotFoundError(f"Bilibili collection {season_id} returned no metadata")
+        return playlist
+
+    async def _collection_tracks(self, season_id: str, page: int) -> list[Track]:
+        """Return one page of a collection's tracks."""
+        meta = await self._collection_meta(season_id)
+        owner = await self._up_name(meta.get("mid"))
+        return await collections.collection_page(
+            self._require_client(),
+            self.instance_id,
+            season_id,
+            page,
+            owner,
+            meta.get("mid"),
+        )
+
+    async def _up_collections(self, mid: str) -> list[Playlist]:
+        """Return every collection of one UP."""
+        owner = await self._up_name(mid)
+        return await collections.list_up_collections(
+            self._require_client(), self.instance_id, mid, owner
+        )
+
+    async def _collection_from_view(self, data: dict[str, Any]) -> Playlist | None:
+        """Return the collection addressed by a view payload's ``ugc_season``."""
+        season_id = collections.season_id_from_view(data)
+        if season_id is None:
+            return None
+        return await self._collection_playlist(season_id)
+
+    # ------------------------------------------------------------------
     # search / lookup
     # ------------------------------------------------------------------
     async def search(
@@ -710,12 +784,38 @@ class BilibiliProvider(MusicProvider):
         media_types: list[MediaType],
         limit: int = 5,
     ) -> SearchResults:
-        """Search Bilibili videos for the track media type."""
-        if MediaType.TRACK not in media_types:
-            return SearchResults()
-
+        """Search Bilibili videos, collections (explicit) and tracks."""
         query = str(search_query or "").strip()
         if not query:
+            return SearchResults()
+
+        # Explicit collection query: BSEASON:<season id> or a collection URL.
+        season_id = collections.season_id_from_query(query)
+        if season_id is not None:
+            if MediaType.PLAYLIST not in media_types:
+                return SearchResults()
+            try:
+                playlist = await self._collection_playlist(season_id)
+            except MediaNotFoundError:
+                return SearchResults()
+            except BiliApiError as err:
+                raise self._translate_error(err) from err
+            return SearchResults(playlists=[playlist])
+
+        # Explicit UP query: UP:<mid> or the UP's space URL lists collections.
+        up_mid = collections.up_mid_from_query(query)
+        if up_mid is not None:
+            if MediaType.PLAYLIST not in media_types:
+                return SearchResults()
+            try:
+                playlists = await self._up_collections(up_mid)
+            except MediaNotFoundError:
+                return SearchResults()
+            except BiliApiError as err:
+                raise self._translate_error(err) from err
+            return SearchResults(playlists=playlists)
+
+        if MediaType.TRACK not in media_types:
             return SearchResults()
 
         if _VIDEO_ID_RE.fullmatch(query):
@@ -731,7 +831,18 @@ class BilibiliProvider(MusicProvider):
             for mapping in track.provider_mappings:
                 mapping.item_id = item_id
             self._remember_artist_names([track])
-            return SearchResults(tracks=[track])
+            # A video that belongs to a collection also surfaces the collection,
+            # so the user can open the whole list from the same search.
+            playlists: list[Playlist] = []
+            if MediaType.PLAYLIST in media_types:
+                try:
+                    if collection := await self._collection_from_view(data):
+                        playlists.append(collection)
+                except (BiliApiError, MediaNotFoundError, MusicAssistantError):
+                    self.logger.debug(
+                        "Could not resolve the collection of %s", query, exc_info=True
+                    )
+            return SearchResults(tracks=[track], playlists=playlists)
 
         search_cap = self._config_int(constants.CONF_SEARCH_LIMIT, constants.DEFAULT_SEARCH_LIMIT)
         if search_cap <= 0:
@@ -941,7 +1052,13 @@ class BilibiliProvider(MusicProvider):
             raise self._translate_error(err) from err
 
     async def get_playlist(self, prov_playlist_id: str) -> Playlist:
-        """Return one favorite folder by its ``fav:<media_id>`` id."""
+        """Return a favorite folder (``fav:``) or a collection (``season:``)."""
+        season_id = collections.season_id_from_item_id(prov_playlist_id)
+        if season_id is not None:
+            try:
+                return await self._collection_playlist(season_id)
+            except BiliApiError as err:
+                raise self._translate_error(err) from err
         client = self._require_client()
         try:
             return await catalog.get_favorite_playlist(client, self.instance_id, prov_playlist_id)
@@ -955,7 +1072,15 @@ class BilibiliProvider(MusicProvider):
     async def get_playlist_tracks(
         self, prov_playlist_id: str, page: int = 0
     ) -> Sequence[PlaylistPlayableItem]:
-        """Return one page of a favorite folder's tracks."""
+        """Return one page of a favorite folder's or a collection's tracks."""
+        season_id = collections.season_id_from_item_id(prov_playlist_id)
+        if season_id is not None:
+            try:
+                tracks = await self._collection_tracks(season_id, page)
+            except BiliApiError as err:
+                raise self._translate_error(err) from err
+            self._remember_artist_names(tracks)
+            return tracks
         client = self._require_client()
         now = time.monotonic()
         cached = self._fav_tracks_cache.get(prov_playlist_id)

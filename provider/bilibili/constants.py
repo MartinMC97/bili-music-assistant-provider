@@ -10,6 +10,8 @@ PROVIDER_NAME: Final = "Bilibili"
 BILI_API: Final = "https://api.bilibili.com"
 BILI_PASSPORT: Final = "https://passport.bilibili.com"
 BILI_REFERER: Final = "https://www.bilibili.com"
+#: Space APIs (UP collections) want the space referer instead.
+BILI_SPACE_REFERER: Final = "https://space.bilibili.com"
 
 # A desktop UA is required by several endpoints and by the audio CDN.
 USER_AGENT: Final = (
@@ -99,6 +101,27 @@ FFMPEG_HEADERS: Final = [
     "-headers",
     (f"Referer: {BILI_REFERER}\r\nOrigin: {BILI_REFERER}\r\nUser-Agent: {USER_AGENT}\r\n"),
 ]
+
+# ---------------------------------------------------------------------------
+# collections (合集 / UGC season)
+# ---------------------------------------------------------------------------
+#: Item ids of collection playlists, e.g. ``season:7817533``.
+COLLECTION_PLAYLIST_PREFIX: Final = "season:"
+
+#: Explicit query prefix for a collection id, e.g. ``BSEASON:7817533``.
+COLLECTION_QUERY_PREFIX: Final = "bseason:"
+
+#: Explicit query prefix for an UP owner, lists that UP's collections.
+UP_QUERY_PREFIX: Final = "up:"
+
+#: The archives endpoint honours up to 100 items per page.
+COLLECTION_PAGE_SIZE: Final = 100
+
+#: Collection metadata is stable; keep it around for a while.
+COLLECTION_META_TTL: Final = 600
+
+#: UP profile (name) lookups are cached for longer.
+UP_PROFILE_TTL: Final = 3600
 
 # ---------------------------------------------------------------------------
 # title noise
