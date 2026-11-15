@@ -20,7 +20,7 @@ import logging
 import time
 from io import BytesIO
 from types import ModuleType
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 
 import aiohttp
 from music_assistant.models.setup_flow import SetupFlowError, StepExpiredError
@@ -66,24 +66,8 @@ QR_STATUS_WAITING_CONFIRM: Final = 86090
 # pin documented in docs/implementation-plan.md (optional dependency)
 SEGNO_REQUIREMENT: Final = "segno==1.6.6"
 
-_SESSDATA_DESCRIPTION: Final = (
-    "SESSDATA cookie of a logged-in bilibili.com session "
-    "(browser DevTools -> Application -> Cookies)."
-)
-_DEDEUSERID_DESCRIPTION: Final = (
-    "Optional DedeUserID cookie from the same session; without it the login cannot be "
-    "identified and account features such as favourites stay unavailable."
-)
-
-
-def _segno_install_hint() -> str:
-    """Return the user-facing hint shown when the optional QR renderer is missing."""
-    return (
-        "QR code login is unavailable because the optional segno package is not "
-        f"installed. Install it with `pip install {SEGNO_REQUIREMENT}` (inside the "
-        "Music Assistant environment) and run setup again, or paste a SESSDATA "
-        "cookie below."
-    )
+#: Translation key override used when QR login is unavailable (adds the install hint).
+CONF_SESSDATA_QR_UNAVAILABLE: Final = "sessdata_qr_unavailable"
 
 
 def _import_segno() -> ModuleType | None:
@@ -105,32 +89,42 @@ def _choose_entries() -> list[ConfigEntry]:
             default_value=METHOD_QR,
             value=METHOD_QR,
             expanded_options=True,
+            # Option titles are localized from
+            # strings.json config_entries.method.options.<value>.
             options=[
-                ConfigValueOption(METHOD_QR, title="QR code (recommended)"),
-                ConfigValueOption(METHOD_MANUAL, title="Paste SESSDATA cookie"),
-                ConfigValueOption(METHOD_ANONYMOUS, title="Continue anonymously"),
+                ConfigValueOption(METHOD_QR),
+                ConfigValueOption(METHOD_MANUAL),
+                ConfigValueOption(METHOD_ANONYMOUS),
             ],
         )
     ]
 
 
-def _manual_entries(*, installation_hint: str | None = None) -> list[ConfigEntry]:
-    """Build the manual cookie form entries."""
-    sessdata_description = _SESSDATA_DESCRIPTION
-    if installation_hint:
-        sessdata_description = f"{installation_hint} {sessdata_description}"
+def _manual_entries(*, qr_unavailable: bool = False) -> list[ConfigEntry]:
+    """
+    Build the manual cookie form entries.
+
+    Labels/descriptions live in ``strings.json`` (``config_entries.sessdata`` etc.);
+    when QR login is unavailable the SESSDATA entry switches to a translation key
+    whose description mentions the ``segno`` install command.
+    """
+    sessdata_kwargs: dict[str, Any] = {}
+    if qr_unavailable:
+        sessdata_kwargs = {
+            "translation_key": CONF_SESSDATA_QR_UNAVAILABLE,
+            "translation_params": [SEGNO_REQUIREMENT],
+        }
     return [
         ConfigEntry(
             key=CONF_SESSDATA,
             type=ConfigEntryType.SECURE_STRING,
             required=True,
-            description=sessdata_description,
+            **sessdata_kwargs,
         ),
         ConfigEntry(
             key=CONF_DEDEUSERID,
             type=ConfigEntryType.STRING,
             required=False,
-            description=_DEDEUSERID_DESCRIPTION,
         ),
     ]
 
@@ -159,7 +153,7 @@ async def run_setup(session: SetupSession) -> None:
     if segno is None:
         # optional dependency: degrade to the manual form instead of breaking setup
         LOGGER.warning("segno is not installed, falling back to manual SESSDATA entry")
-        await _finish_manual_login(session, installation_hint=_segno_install_hint())
+        await _finish_manual_login(session, qr_unavailable=True)
         return
 
     await _finish_qr_login(session, segno)
@@ -168,17 +162,16 @@ async def run_setup(session: SetupSession) -> None:
 async def _finish_manual_login(
     session: SetupSession,
     *,
-    installation_hint: str | None = None,
+    qr_unavailable: bool = False,
 ) -> None:
     """
     Collect SESSDATA/DedeUserID, build the credential and finish the flow.
 
     :param session: The setup session driving the flow.
-    :param installation_hint: Optional note prefixed to the SESSDATA description
-        (used when QR login is unavailable).
+    :param qr_unavailable: Whether QR login was impossible (adds an install hint).
     """
     submitted = await session.form(
-        _manual_entries(installation_hint=installation_hint),
+        _manual_entries(qr_unavailable=qr_unavailable),
         step_id="manual",
     )
     sessdata = str(submitted.get(CONF_SESSDATA) or "").strip()
