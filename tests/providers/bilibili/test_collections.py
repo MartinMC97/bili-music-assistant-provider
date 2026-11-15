@@ -26,6 +26,8 @@ from bilibili import BilibiliProvider, collections, constants, parsers
 from bilibili.auth import BilibiliCredential
 from bilibili.client import BilibiliClient
 
+from .fakes import FakeMassBase
+
 PROVIDER = "bilibili_collections_test"
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 MANIFEST = SimpleNamespace(
@@ -105,12 +107,12 @@ class FakeMassConfig:
         return None
 
 
-class FakeMass:
+class FakeMass(FakeMassBase):
     """Minimal ``MusicAssistant`` stand-in with network access disabled."""
 
     def __init__(self) -> None:
         """Build the stand-in."""
-        self.cache = None
+        super().__init__()
         self.http_session = NoNetworkSession()
         self.config = FakeMassConfig()
 
@@ -443,6 +445,21 @@ async def test_get_playlist_tracks_pages_the_collection() -> None:
     assert season_calls[-1][3] == constants.COLLECTION_PAGE_SIZE
 
     assert await provider.get_playlist_tracks("season:7817533", page=1) == []
+
+
+async def test_collection_metadata_and_owner_lookups_are_cached() -> None:
+    """Repeated reads reuse the cached season meta and UP card."""
+    client = FakeClient()
+    provider = await make_provider(client)
+
+    await provider.get_playlist_tracks("season:7817533", page=0)
+    await provider.get_playlist_tracks("season:7817533", page=0)
+
+    card_calls = [call for call in client.calls if call[0] == "space_card"]
+    archive_calls = [call for call in client.calls if call[0] == "season_archives"]
+    assert len(card_calls) == 1
+    # first read: meta lookup + the archives page; second read: the archives page only
+    assert len(archive_calls) == 3
 
 
 async def test_get_playlist_tracks_reports_missing_collection() -> None:

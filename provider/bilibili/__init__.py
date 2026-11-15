@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import aiohttp
 from music_assistant.constants import CONF_ENTRY_UNOFFICIAL_PROVIDER, PlaylistPlayableItem
+from music_assistant.controllers.cache import use_cache
 from music_assistant.models.music_provider import MusicProvider
 from music_assistant_models.config_entries import ConfigEntry, ConfigValueOption
 from music_assistant_models.enums import (
@@ -76,9 +77,6 @@ _DEFAULT_STREAM_EXPIRATION: Final = 600
 
 #: How many URLs of one stream we are willing to probe (base + two backups).
 _MAX_PROBED_URLS: Final = 3
-
-#: Upper bound for the number of view payloads kept in the in-memory cache.
-_VIEW_CACHE_MAX: Final = 256
 
 #: Search API page size bounds (the endpoint rejects oversized pages).
 _SEARCH_PAGE_SIZE_MIN: Final = 20
@@ -328,16 +326,10 @@ class BilibiliProvider(MusicProvider):
         self._user_name: str = ""
         self._mid: int = 0
         self._artist_names: dict[str, str] = {}
-        # bvid -> (monotonic expiry, raw view payload)
-        self._view_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         # CDN host -> (healthy, monotonic expiry)
         self._cdn_health: dict[str, tuple[bool, float]] = {}
-        # playlist id -> (monotonic expiry, all playable tracks)
-        self._fav_tracks_cache: dict[str, tuple[float, list[Track]]] = {}
-        # season id -> (monotonic expiry, collection meta payload)
-        self._collection_meta_cache: dict[str, tuple[float, dict[str, Any]]] = {}
-        # UP mid -> (monotonic expiry, display name)
-        self._up_name_cache: dict[str, tuple[float, str]] = {}
+        # Payload caches (view / collection / UP name / favorite tracks) live in the
+        # Music Assistant cache controller through ``@use_cache`` instead.
 
     # ------------------------------------------------------------------
     # lifecycle
@@ -370,13 +362,11 @@ class BilibiliProvider(MusicProvider):
         )
 
     async def unload(self, is_removed: bool = False) -> None:
-        """Release the client reference and drop the in-memory caches."""
+        """Release the client reference and drop the session-scoped state."""
         client = self._client
         self._client = None
-        self._view_cache.clear()
         self._artist_names.clear()
         self._cdn_health.clear()
-        self._fav_tracks_cache.clear()
         if client is not None:
             await client.close()
 
@@ -609,26 +599,12 @@ class BilibiliProvider(MusicProvider):
             self._remember_artist_names(tracks)
             return tracks
         client = self._require_client()
-        now = time.monotonic()
-        cached = self._fav_tracks_cache.get(prov_playlist_id)
-        if cached is not None and cached[0] > now:
-            all_tracks = cached[1]
-        else:
-            try:
-                all_tracks = [
-                    track
-                    async for track in catalog.iter_favorite_tracks(
-                        client, self.instance_id, prov_playlist_id
-                    )
-                ]
-            except BiliApiError as err:
-                if self._handle_auth_error(client, err):
-                    return []
-                raise self._translate_error(err) from err
-            self._fav_tracks_cache[prov_playlist_id] = (
-                now + constants.FAVORITES_CACHE_TTL,
-                all_tracks,
-            )
+        try:
+            all_tracks = await self._favorite_tracks(prov_playlist_id)
+        except BiliApiError as err:
+            if self._handle_auth_error(client, err):
+                return []
+            raise self._translate_error(err) from err
 
         start = max(int(page), 0) * catalog.FAV_PAGE_SIZE
         tracks = all_tracks[start : start + catalog.FAV_PAGE_SIZE]
@@ -823,31 +799,18 @@ class BilibiliProvider(MusicProvider):
                 return page
         return None
 
+    @use_cache(constants.VIEW_CACHE_TTL)
     async def _view(self, video_id: str) -> dict[str, Any]:
-        """Return a view payload, cached in memory for 24 hours."""
-        now = time.monotonic()
-        cached = self._view_cache.get(video_id)
-        if cached is not None and cached[0] > now:
-            return cached[1]
-
+        """Return a view payload (cached for ``VIEW_CACHE_TTL``)."""
         avid = self._avid(video_id)
         try:
-            data = (
+            return (
                 await self._require_client().view(aid=avid)
                 if avid is not None
                 else await self._require_client().view(video_id)
             )
         except BiliApiError as err:
             raise self._translate_error(err) from err
-
-        if len(self._view_cache) >= _VIEW_CACHE_MAX:
-            live = {key: value for key, value in self._view_cache.items() if value[0] > now}
-            if len(live) >= _VIEW_CACHE_MAX:
-                # Drop the entry that expires first instead of growing past the cap.
-                live.pop(min(live, key=lambda key: live[key][0]), None)
-            self._view_cache = live
-        self._view_cache[video_id] = (now + constants.VIEW_CACHE_TTL, data)
-        return data
 
     async def _first_cid(self, video_id: str) -> int:
         """Resolve the first playable cid of a video."""
@@ -863,6 +826,16 @@ class BilibiliProvider(MusicProvider):
         if not cid:
             raise UnplayableMediaError(f"Bilibili video {video_id} has no playable page")
         return cid
+
+    @use_cache(constants.FAVORITES_CACHE_TTL)
+    async def _favorite_tracks(self, prov_playlist_id: str) -> list[Track]:
+        """Return every playable track of a favorite folder (cached for 5 minutes)."""
+        return [
+            track
+            async for track in catalog.iter_favorite_tracks(
+                self._require_client(), self.instance_id, prov_playlist_id
+            )
+        ]
 
     def _remember_artist_names(self, items: Iterable[Any]) -> None:
         """Remember UP-owner ids/names so get_artist can answer from memory."""
@@ -938,35 +911,30 @@ class BilibiliProvider(MusicProvider):
     # collections (合集 / UGC season)
     # ------------------------------------------------------------------
     async def _up_name(self, mid: Any) -> str:
-        """Return an UP display name (cached); empty when it cannot be resolved."""
+        """Return an UP display name; empty when it cannot be resolved."""
         key = str(mid or "").strip()
         if not key.isdigit():
             return ""
-        now = time.monotonic()
-        cached = self._up_name_cache.get(key)
-        if cached is not None and cached[0] > now:
-            return cached[1]
         try:
-            card = await self._require_client().space_card(int(key))
+            name = await self._fetch_up_name(key)
         except BiliApiError as err:
             self.logger.debug("Could not resolve Bilibili UP %s: %s", key, err)
             return ""
-        parsed = parsers.parse_up_card(card)
-        name = parsed[0] if parsed else ""
-        self._up_name_cache[key] = (now + constants.UP_PROFILE_TTL, name)
         if name:
             self._artist_names.setdefault(key, name)
         return name
 
+    @use_cache(constants.UP_PROFILE_TTL)
+    async def _fetch_up_name(self, key: str) -> str:
+        """Return one UP's display name (cached for ``UP_PROFILE_TTL``)."""
+        card = await self._require_client().space_card(int(key))
+        parsed = parsers.parse_up_card(card)
+        return parsed[0] if parsed else ""
+
+    @use_cache(constants.COLLECTION_META_TTL)
     async def _collection_meta(self, season_id: str) -> dict[str, Any]:
-        """Return a collection's ``meta`` block, cached for a short while."""
-        now = time.monotonic()
-        cached = self._collection_meta_cache.get(season_id)
-        if cached is not None and cached[0] > now:
-            return cached[1]
-        meta = await collections.find_collection_meta(self._require_client(), season_id)
-        self._collection_meta_cache[season_id] = (now + constants.COLLECTION_META_TTL, meta)
-        return meta
+        """Return a collection's ``meta`` block (cached for ``COLLECTION_META_TTL``)."""
+        return await collections.find_collection_meta(self._require_client(), season_id)
 
     async def _collection_playlist(self, season_id: str) -> Playlist:
         """Build a Playlist for one collection."""

@@ -18,6 +18,7 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -29,44 +30,29 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "provider"))
 from bilibili import BilibiliProvider  # noqa: E402
 from bilibili.auth import BilibiliCredential  # noqa: E402
 from bilibili.client import BilibiliClient  # noqa: E402
+from e2e_support import E2EMass  # noqa: E402
 
 SID = sys.argv[1] if len(sys.argv) > 1 else "7817533"
 MID = sys.argv[2] if len(sys.argv) > 2 else "3546851714271831"
 LOG = logging.getLogger("e2e-collections")
-
-
-class FakeMass:
-    """Only what BilibiliClient/search/get_stream_details touch."""
-
-    def __init__(self, session: aiohttp.ClientSession) -> None:
-        """Keep the shared aiohttp session."""
-        self.http_session = session
+MANIFEST = SimpleNamespace(type=ProviderType.MUSIC, domain="bilibili", name="Bilibili")
 
 
 class E2EProvider(BilibiliProvider):
     """A provider instance without running the full MA app."""
 
-    def __init__(self, mass: FakeMass, config: ProviderConfig, client: BilibiliClient) -> None:
-        """Register the bare minimum provider state."""
-        self.mass = mass
-        self.config = config
-        self.logger = LOG
+    def __init__(self, mass: E2EMass, config: ProviderConfig, client: BilibiliClient) -> None:
+        """Register the provider state plus the injected client."""
+        super().__init__(mass, MANIFEST, config)
         self._client = client
-        self._view_cache = {}
-        self._cdn_health = {}
-        self._artist_names = {}
-        self._fav_tracks_cache = {}
-        self._collection_meta_cache = {}
-        self._up_name_cache = {}
-        self._user_name = ""
-        self._mid = 0
+        self.logger = LOG
 
 
 async def main() -> int:
     """Run the collection search/playlist/stream checks."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     async with aiohttp.ClientSession() as session:
-        mass = FakeMass(session)
+        mass = E2EMass(session)
         client = BilibiliClient(mass, BilibiliCredential())
         config = ProviderConfig(
             type=ProviderType.MUSIC,

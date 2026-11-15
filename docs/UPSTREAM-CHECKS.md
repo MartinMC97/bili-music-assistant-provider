@@ -12,7 +12,7 @@
 | `mypy` strict（`disallow_untyped_defs` 等，`files = provider/bilibili + tests`） | mypy 2.3.0（官方 pin） | ✅ 0 errors |
 | `codespell` | 2.4.3（官方 pin） | ✅ 全绿 |
 | provider conventions（本地复刻官方 4 个脚本，见下） | `scripts/check_provider_conventions.py` | ✅ 全绿 |
-| `pytest`（离线，`tests/providers/bilibili/`） | pytest + pytest-asyncio | ✅ 221 passed, 1 skipped |
+| `pytest`（离线，`tests/providers/bilibili/`） | pytest + pytest-asyncio | ✅ 224 passed, 1 skipped |
 
 `provider conventions` 复刻了官方 pre-commit 里的四条规则：
 
@@ -27,6 +27,19 @@
 另外 `tests/providers/bilibili/test_locale.py` 会验证 `strings.json` 覆盖所有
 config entry / 选项 / setup flow 条目 / browse+recommendation 文件夹，
 并且 `manifest.description` 与 `strings.json` 的 `manifest.description` 一致。
+
+## 缓存与图标
+
+- view / 合集 meta / UP 名称 / 收藏夹列表的缓存已改用官方 `@use_cache`
+  （`music_assistant.controllers.cache`），不再维护自建 dict 缓存；TTL 仍集中在
+  `constants.py`（`VIEW_CACHE_TTL`、`COLLECTION_META_TTL`、`UP_PROFILE_TTL`、
+  `FAVORITES_CACHE_TTL`）。
+- 单元测试通过 `tests/providers/bilibili/fakes.py` 的 `FakeCache` 复刻
+  `mass.cache` 的读写行为（真实控制器会 JSON 往返，`FakeCache` 也一样），
+  并有“失败的请求不写入缓存、下次重试”的回归用例。
+- 图标：`icon.svg`（品牌色）供默认/深色主题使用，`icon_monochrome.svg`
+  （白色单色）供需要单色图标的 UI 使用；前端在浅色主题下会自动 `invert(1)`，
+  两者都在 5 KB 预算内。
 
 本地跑法：
 
@@ -68,7 +81,4 @@ tests/providers/bilibili/
 1. provider 目录移动到 `music_assistant/providers/bilibili/`，测试移动到 `tests/providers/bilibili/`；
 2. `strings.json` 交给官方 Lokalise 流程（本仓库已是英文源 + translation key）；
 3. `manifest.documentation` 指向 `https://music-assistant.io/music-providers/bilibili`（需另提 docs PR）；
-4. 可考虑补 `icon_monochrome.svg`；
-5. 用官方 `@use_cache` 替换自建的 dict 缓存（`_view_cache`、`_collection_meta_cache` 等），
-   这是 review 建议项，不属于脚本强制检查；
-6. 删除本仓库的 `docker/`、`.github/workflows/`、`scripts/e2e_*.py`（官方统一镜像与 CI）。
+4. 删除本仓库的 `docker/`、`.github/workflows/`、`scripts/e2e_*.py`（官方统一镜像与 CI）。

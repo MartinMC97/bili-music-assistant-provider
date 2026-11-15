@@ -27,6 +27,8 @@ from bilibili import BilibiliProvider
 from bilibili.auth import BilibiliCredential
 from bilibili.client import BiliApiError, BilibiliClient
 
+from .fakes import FakeMassBase
+
 PROVIDER = "bilibili_error_mapping"
 MANIFEST = SimpleNamespace(
     type=ProviderType.MUSIC,
@@ -118,12 +120,12 @@ class FakeMassConfig:
         return
 
 
-class FakeMass:
+class FakeMass(FakeMassBase):
     """Minimal ``MusicAssistant`` stand-in."""
 
     def __init__(self) -> None:
-        """Provide only the config object the provider touches."""
-        self.cache = None
+        """Provide the cache and config object the provider touches."""
+        super().__init__()
         self.http_session = None
         self.config = FakeMassConfig()
 

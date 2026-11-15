@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`provider/bilibili/` is the sole source tree for this unofficial Music Assistant provider. `__init__.py` integrates the provider; `client.py` handles HTTP; `parsers.py` maps responses into MA models; `catalog.py` handles browsing and favorites; `auth.py`, `setup_flow.py`, and `wbi.py` handle credentials, login, and signing. Provider assets include `manifest.json`, `strings.json`, and `icon.svg`.
+`provider/bilibili/` is the sole source tree for this unofficial Music Assistant provider. `__init__.py` integrates the provider; `client.py` handles HTTP; `parsers.py` maps responses into MA models; `catalog.py` handles browsing and favorites; `auth.py`, `setup_flow.py`, and `wbi.py` handle credentials, login, and signing. Provider assets include `manifest.json`, `strings.json`, `icon.svg`, and `icon_monochrome.svg`.
 
 Tests live in `tests/unit/` and `tests/integration/`, with recorded JSON responses in `tests/fixtures/`. `docker/` contains development and image configurations; `scripts/` contains installation and development helpers. Consult `docs/contracts.md` for module boundaries and `docs/INSTALL.md` for installation.
 
