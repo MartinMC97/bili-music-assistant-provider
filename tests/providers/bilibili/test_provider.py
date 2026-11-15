@@ -5,12 +5,9 @@ from __future__ import annotations
 import copy
 import time
 from types import SimpleNamespace
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Self, cast
 
 import pytest
-from bilibili import BilibiliProvider, constants, setup
-from bilibili.auth import BilibiliCredential
-from bilibili.client import BiliApiError
 from music_assistant.constants import CONF_ENTRY_UNOFFICIAL_PROVIDER
 from music_assistant_models.config_entries import ProviderConfig
 from music_assistant_models.enums import (
@@ -27,6 +24,10 @@ from music_assistant_models.errors import (
     ResourceTemporarilyUnavailable,
     UnplayableMediaError,
 )
+
+from bilibili import BilibiliProvider, constants, setup
+from bilibili.auth import BilibiliCredential
+from bilibili.client import BiliApiError, BilibiliClient
 
 PROVIDER = "bilibili_test"
 MANIFEST = SimpleNamespace(
@@ -48,6 +49,7 @@ class FakeMassConfig:
         setup_data: dict[str, Any] | None = None,
         raw_values: dict[str, Any] | None = None,
     ) -> None:
+        """Store the setup data and raw provider overrides."""
         self.setup_data = dict(setup_data or {})
         self.raw_values = dict(raw_values or {})
 
@@ -78,6 +80,7 @@ class FakeMass:
         setup_data: dict[str, Any] | None = None,
         raw_values: dict[str, Any] | None = None,
     ) -> None:
+        """Store the HTTP session and config stand-ins."""
         self.cache = None
         self.http_session = http_session or RecordingHTTPSession()
         self.config = FakeMassConfig(setup_data, raw_values)
@@ -87,12 +90,15 @@ class ProbeResponse:
     """Async context manager shaped like an aiohttp response."""
 
     def __init__(self, status: int) -> None:
+        """Store the canned HTTP status."""
         self.status = status
 
-    async def __aenter__(self) -> ProbeResponse:
+    async def __aenter__(self) -> Self:
+        """Enter the context manager."""
         return self
 
     async def __aexit__(self, *exc_info: object) -> bool:
+        """Leave the context manager without suppressing exceptions."""
         return False
 
 
@@ -100,10 +106,12 @@ class RecordingHTTPSession:
     """Record CDN probe requests and return canned statuses."""
 
     def __init__(self, statuses: list[int] | None = None) -> None:
+        """Queue up the canned probe statuses."""
         self.statuses = list(statuses or [])
         self.requests: list[tuple[str, dict[str, Any]]] = []
 
     def get(self, url: str, **kwargs: Any) -> ProbeResponse:
+        """Record the probe request and return the next canned response."""
         self.requests.append((str(url), kwargs))
         status = self.statuses.pop(0) if self.statuses else 200
         return ProbeResponse(status)
@@ -120,6 +128,7 @@ class FakeClient:
         view_data: dict[str, Any] | None = None,
         playurl_data: dict[str, Any] | None = None,
     ) -> None:
+        """Store the canned payloads and call log."""
         self.credential = credential or BilibiliCredential()
         self.search_items = list(search_items or [])
         self.view_data = view_data or {}
@@ -166,6 +175,11 @@ class FakeClient:
         self.calls.append(("close",))
 
 
+if TYPE_CHECKING:
+    from music_assistant.mass import MusicAssistant
+    from music_assistant_models.provider import ProviderManifest
+
+
 async def make_provider(
     *,
     client: FakeClient | None = None,
@@ -187,8 +201,8 @@ async def make_provider(
         raw_values=raw_values,
     )
     provider = BilibiliProvider(
-        mass,
-        MANIFEST,
+        cast("MusicAssistant", mass),
+        cast("ProviderManifest", MANIFEST),
         config,
         {
             ProviderFeature.SEARCH,
@@ -203,7 +217,7 @@ async def make_provider(
             copied.value = overrides[entry.key]
         config.values[copied.key] = copied
     if client is not None:
-        provider._client = client
+        provider._client = cast("BilibiliClient", client)
     return provider, mass
 
 
@@ -313,7 +327,9 @@ async def test_setup_returns_provider_with_expected_features() -> None:
         instance_id=PROVIDER,
         values={},
     )
-    provider = await setup(FakeMass(), MANIFEST, config)
+    provider = await setup(
+        cast("MusicAssistant", FakeMass()), cast("ProviderManifest", MANIFEST), config
+    )
 
     assert isinstance(provider, BilibiliProvider)
     assert provider.supported_features == {
@@ -336,6 +352,7 @@ class InitFakeClient:
     instances: ClassVar[list[InitFakeClient]] = []
 
     def __init__(self, mass: Any, credential: BilibiliCredential, logger: Any = None) -> None:
+        """Store the injected collaborators and reset the call counters."""
         self.mass = mass
         self.credential = credential
         self.logger = logger
@@ -370,13 +387,13 @@ def init_client(monkeypatch: pytest.MonkeyPatch) -> type[InitFakeClient]:
     return InitFakeClient
 
 
-async def test_init_anonymous_fetches_buvid(init_client: type[InitFakeClient]) -> None:
+@pytest.mark.usefixtures("init_client")
+async def test_init_anonymous_fetches_buvid() -> None:
     """Anonymous startup fetches the buvid fingerprint exactly once."""
     provider, _ = await make_provider()
     await provider.handle_async_init()
 
-    client = provider._client
-    assert client is not None
+    client = cast("InitFakeClient", provider._client)
     assert client.nav_calls == 0
     assert client.spi_calls == 1
     assert client.credential.has_login is False
@@ -397,8 +414,7 @@ async def test_init_valid_credential_records_user(
 
     await provider.handle_async_init()
 
-    client = provider._client
-    assert client is not None
+    client = cast("InitFakeClient", provider._client)
     assert client.nav_calls == 1
     assert client.spi_calls == 0
     assert provider._user_name == "Alice"
@@ -418,8 +434,7 @@ async def test_init_invalid_credential_degrades_to_anonymous(
 
     await provider.handle_async_init()
 
-    client = provider._client
-    assert client is not None
+    client = cast("InitFakeClient", provider._client)
     assert client.credential.has_login is False
     assert client.credential.sessdata == ""
     assert client.spi_calls == 1
@@ -439,8 +454,7 @@ async def test_init_nav_api_error_degrades_to_anonymous(
 
     await provider.handle_async_init()
 
-    client = provider._client
-    assert client is not None
+    client = cast("InitFakeClient", provider._client)
     assert client.credential.has_login is False
     assert client.spi_calls == 1
 
@@ -457,8 +471,7 @@ async def test_init_network_error_keeps_saved_credential(
 
     await provider.handle_async_init()
 
-    client = provider._client
-    assert client is not None
+    client = cast("InitFakeClient", provider._client)
     assert client.credential.has_login is True
     assert client.spi_calls == 0
 
@@ -474,8 +487,7 @@ async def test_init_manual_sessdata_backfills_mid(
 
     await provider.handle_async_init()
 
-    client = provider._client
-    assert client is not None
+    client = cast("InitFakeClient", provider._client)
     assert client.credential.sessdata == "manual-sessdata"
     assert client.credential.dedeuserid == "77"
     assert client.credential.has_login is True
@@ -660,7 +672,7 @@ async def test_get_artist_uses_remembered_name_and_fallback() -> None:
 # get_stream_details
 # ---------------------------------------------------------------------------
 async def test_stream_default_quality_picks_flac() -> None:
-    """auto quality prefers FLAC over Dolby and AAC."""
+    """Auto quality prefers FLAC over Dolby and AAC."""
     deadline = int(time.time()) + 900
     flac = audio_entry(
         30251,
@@ -742,7 +754,7 @@ async def test_stream_resolves_cid_from_view_when_missing() -> None:
 
 
 async def test_stream_handles_avid_and_single_dict_flac() -> None:
-    """av ids and a dict-shaped dash.flac.audio both work."""
+    """Av ids and a dict-shaped dash.flac.audio both work."""
     flac = audio_entry(30251, "cdn-flac", 900_000, mime_type="audio/flac", codecs="flac")
     client = FakeClient(playurl_data=dash_payload(flac=flac))
     provider, _ = await make_provider(
@@ -876,7 +888,7 @@ async def test_anonymous_library_playlists_are_empty() -> None:
 
 
 async def test_unload_drops_client_and_caches() -> None:
-    """unload closes the client and clears the in-memory caches."""
+    """Unload closes the client and clears the in-memory caches."""
     client = FakeClient()
     provider, _ = await make_provider(client=client)
 

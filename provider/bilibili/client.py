@@ -1,4 +1,5 @@
-"""HTTP client for the Bilibili web API.
+"""
+HTTP client for the Bilibili web API.
 
 The client owns request headers, throttling, WBI key caching and the small
 amount of response normalisation the provider needs. It never constructs MA
@@ -63,8 +64,10 @@ class AudioStream:
 
 def _coerce_int(value: object, default: int = 0) -> int:
     """Best effort int conversion for JSON numbers which arrive as strings."""
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        return default
     try:
-        return int(value)  # type: ignore[arg-type]
+        return int(value)
     except TypeError, ValueError:
         return default
 
@@ -147,7 +150,8 @@ class BilibiliClient:
         credential: BilibiliCredential,
         logger: logging.Logger | None = None,
     ) -> None:
-        """Initialize the client.
+        """
+        Initialize the client.
 
         The aiohttp session is owned by Music Assistant and reused here, so
         :meth:`close` intentionally does nothing.
@@ -191,7 +195,8 @@ class BilibiliClient:
         *,
         query: str | None = None,
     ) -> URL:
-        """Build an already-encoded URL.
+        """
+        Build an already-encoded URL.
 
         ``encoded=True`` is essential for WBI requests: the signed query must be
         sent byte for byte and must not be encoded a second time by yarl.
@@ -309,7 +314,8 @@ class BilibiliClient:
     # public API
     # ------------------------------------------------------------------
     async def nav(self) -> dict[str, Any]:
-        """Return the nav payload data.
+        """
+        Return the nav payload data.
 
         A logged-out cookie produces ``code=-101`` but still carries a valid
         ``wbi_img`` object, so that code is explicitly accepted.
@@ -411,7 +417,8 @@ class BilibiliClient:
         page_size: int = constants.COLLECTION_PAGE_SIZE,
         sort_reverse: bool = False,
     ) -> dict[str, Any]:
-        """Return one page of a collection's videos plus its metadata.
+        """
+        Return one page of a collection's videos plus its metadata.
 
         The endpoint also works without a ``mid`` (the response carries the
         owner mid in ``meta.mid``), so a collection id alone is enough.
@@ -517,7 +524,8 @@ class BilibiliClient:
         return _data(payload)
 
     async def qrcode_poll(self, qrcode_key: str) -> tuple[int, dict[str, str]]:
-        """Poll a login QR code.
+        """
+        Poll a login QR code.
 
         Returns the *inner* ``data.code`` (86101/86090/86038/0) together with
         the cookies set by the successful response. A 200 response with a

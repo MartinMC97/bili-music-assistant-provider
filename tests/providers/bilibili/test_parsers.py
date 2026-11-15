@@ -5,9 +5,17 @@ from __future__ import annotations
 import json
 from datetime import UTC
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from music_assistant_models.enums import ImageType, LinkType
+from music_assistant_models.media_items import (
+    ItemMapping,
+    MediaItemLink,
+    Playlist,
+    Track,
+)
+
 from bilibili.parsers import (
     clean_title,
     extract_em_tags,
@@ -20,22 +28,17 @@ from bilibili.parsers import (
     parse_view,
     to_https,
 )
-from music_assistant_models.enums import ImageType, LinkType
-from music_assistant_models.media_items import (
-    ItemMapping,
-    MediaItemLink,
-    Playlist,
-    Track,
-)
 
-FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 PROVIDER = "bilibili_test"
 DOMAIN = "bilibili"
 
 
 def load_fixture(name: str) -> dict[str, Any]:
     """Load a recorded API response from ``tests/fixtures``."""
-    return json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
+    return cast(
+        "dict[str, Any]", json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -85,13 +88,14 @@ def test_clean_title_search_fixtures() -> None:
     items = load_fixture("search_video")["data"]["result"]
     titles = [clean_title(item["title"]) for item in items]
 
-    assert titles[0] == "《晴天》- 周杰伦 -‘故事的小黄花’"
+    assert titles[0] == "《晴天》- 周杰伦 -‘故事的小黄花’"  # noqa: RUF001 - Chinese test data
     assert titles[1] == "周杰伦 - 晴天"
     assert titles[3] == "晴天-周杰伦"
     assert titles[4] == "周杰伦——《晴天》"
     for title in titles:
         assert "<em" not in title
-        assert "【" not in title and "】" not in title
+        assert "【" not in title
+        assert "】" not in title
         assert "无损音质" not in title
         assert "4K" not in title
 
@@ -110,7 +114,7 @@ def test_clean_title_edge_cases() -> None:
     """Empty input and titles made only of noise are handled."""
     assert clean_title("") == ""
     assert clean_title("   ") == ""
-    assert clean_title("晴天（官方MV）") == "晴天"
+    assert clean_title("晴天（官方MV）") == "晴天"  # noqa: RUF001 - full-width test data
     assert clean_title("【官方 MV】晴天") == "晴天"
     assert clean_title("【4K修复】") == ""
 
@@ -126,11 +130,13 @@ def test_parse_search_item() -> None:
     assert isinstance(track, Track)
     assert track.item_id == "BV1BZbSzZEGT"
     assert track.provider == PROVIDER
-    assert track.name == "《晴天》- 周杰伦 -‘故事的小黄花’"
+    assert track.name == "《晴天》- 周杰伦 -‘故事的小黄花’"  # noqa: RUF001 - Chinese test data
     assert track.duration == 270
     assert track.metadata.popularity == 3322671
     # The raw title is kept for reference, with search highlight markup removed.
-    assert track.metadata.description == ("【𝐇𝐢-𝐑𝐞𝐬无损音质】｜《晴天》- 周杰伦 -‘故事的小黄花’")
+    assert track.metadata.description == (
+        "【𝐇𝐢-𝐑𝐞𝐬无损音质】｜《晴天》- 周杰伦 -‘故事的小黄花’"  # noqa: RUF001 - captured title
+    )
     assert "<em" not in track.name
     assert track.metadata.release_date is not None
     assert track.metadata.release_date.year == 2025
@@ -188,6 +194,7 @@ def test_parse_ranking_item() -> None:
 
     assert all(isinstance(track, Track) for track in tracks)
     first = tracks[0]
+    assert first is not None
     assert first.item_id == "BV17VZpY1ENA"
     assert first.duration == 15
     assert first.metadata.popularity == 17868708
@@ -325,7 +332,7 @@ def test_parse_fav_folder() -> None:
 
 def test_parse_fav_folder_without_id_raises() -> None:
     """A folder payload without an id is a programming error, not a Track."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="has no id"):
         parse_fav_folder({"title": "夜跑"}, PROVIDER, "小明")
 
 

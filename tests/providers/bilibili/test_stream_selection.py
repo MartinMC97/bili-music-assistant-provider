@@ -1,4 +1,5 @@
-"""Stream selection tests for :meth:`BilibiliProvider.get_stream_details`.
+"""
+Stream selection tests for :meth:`BilibiliProvider.get_stream_details`.
 
 A fake client serves the recorded ``tests/fixtures/playurl.json`` DASH payload, so
 these tests never touch the network. The CDN probe is disabled explicitly; the
@@ -11,10 +12,8 @@ import copy
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
-from bilibili import BilibiliProvider, constants
-from bilibili.auth import BilibiliCredential
 from music_assistant_models.config_entries import ProviderConfig
 from music_assistant_models.enums import (
     ContentType,
@@ -25,8 +24,12 @@ from music_assistant_models.enums import (
     StreamType,
 )
 
+from bilibili import BilibiliProvider, constants
+from bilibili.auth import BilibiliCredential
+from bilibili.client import BilibiliClient
+
 PROVIDER = "bilibili_stream_selection"
-FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 MANIFEST = SimpleNamespace(
     type=ProviderType.MUSIC,
     domain="bilibili",
@@ -71,7 +74,7 @@ def add_flac(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def overrides(**extra: Any) -> dict[str, Any]:
-    """Base config overrides: probing is always disabled in these tests."""
+    """Return base config overrides with CDN probing disabled."""
     values: dict[str, Any] = {constants.CONF_VERIFY_STREAM_URL: False}
     values.update(extra)
     return values
@@ -139,6 +142,11 @@ class FakeClient:
         return self.playurl_data
 
 
+if TYPE_CHECKING:
+    from music_assistant.mass import MusicAssistant
+    from music_assistant_models.provider import ProviderManifest
+
+
 async def make_provider(
     playurl_data: dict[str, Any],
     config_overrides: dict[str, Any] | None = None,
@@ -151,7 +159,12 @@ async def make_provider(
         values={},
     )
     mass = FakeMass(config_overrides)
-    provider = BilibiliProvider(mass, MANIFEST, config, {ProviderFeature.SEARCH})
+    provider = BilibiliProvider(
+        cast("MusicAssistant", mass),
+        cast("ProviderManifest", MANIFEST),
+        config,
+        {ProviderFeature.SEARCH},
+    )
     for entry in await provider.get_config_entries():
         copied = copy.deepcopy(entry)
         if config_overrides and entry.key in config_overrides:
@@ -159,7 +172,7 @@ async def make_provider(
         config.values[copied.key] = copied
 
     client = FakeClient(playurl_data)
-    provider._client = client
+    provider._client = cast("BilibiliClient", client)
     return provider, client
 
 
@@ -192,7 +205,7 @@ async def test_aac64_quality_selects_30216() -> None:
 
 
 async def test_auto_selects_flac_when_candidate_is_present() -> None:
-    """auto prefers the added FLAC candidate (30251) over every AAC stream."""
+    """Auto prefers the added FLAC candidate (30251) over every AAC stream."""
     data = add_flac(load_playurl())
     provider, _ = await make_provider(data, overrides())
 

@@ -7,7 +7,9 @@
   "codeowners": [
     "@MartinMC97"
   ],
-  "requirements": [],
+  "requirements": [
+    "segno==1.6.6"
+  ],
   "documentation": "https://github.com/MartinMC97/bili-music-assistant-provider",
   "multi_instance": true,
   "credits": [

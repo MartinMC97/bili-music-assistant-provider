@@ -12,22 +12,162 @@ dependencies = []
 Homepage = "https://github.com/MartinMC97/bili-music-assistant-provider"
 Repository = "https://github.com/MartinMC97/bili-music-assistant-provider"
 
+[project.optional-dependencies]
+# Pinned to the versions music-assistant/server uses so lint results match upstream.
+dev = [
+  "codespell==2.4.3",
+  "mypy==2.3.0",
+  "pytest==9.1.1",
+  "pytest-asyncio",
+  "pytest-cov",
+  "pytest-timeout",
+  "pytest-xdist",
+  "ruff==0.15.22",
+]
+
+[tool.codespell]
+ignore-words-list = "provid,hass,followings,childs,explict,additionals,commitish,nam,connexion,claus,childrens,speaches,medias,worte,"
+skip = "*.js,*.svg,.dev-data,.screenshot,.tmp-*,NOTICE"
+
+[tool.ruff]
+fix = true
+show-fixes = true
+line-length = 100
+target-version = "py314"
+extend-exclude = [".dev-data", ".refs", ".screenshot", ".tmp", "docker", "artifacts"]
+
+[tool.ruff.lint]
+ignore = [
+  "ANN002",
+  "ANN003",
+  "ANN401",
+  "D203",
+  "D417",
+  "EM101",
+  "EM102",
+  "FIX002",
+  "PLR2004",
+  "PGH004",
+  "PD011",
+  "S101",
+  "TC001",
+  "TC003",
+  "TD002",
+  "TD003",
+  "TD004",
+  "TRY003",
+  "TRY400",
+  "COM812",
+  "ASYNC109",
+  "ASYNC110",
+  "N818",
+  "E501",
+  "ASYNC240",
+  "UP047",
+  "PLW0108",
+  "FURB110",
+  "BLE001",
+  "FBT001",
+  "FBT002",
+  "FBT003",
+  "ANN001",
+  "ANN202",
+  "PTH118",
+  "PTH120",
+  "PTH123",
+  "G004",
+  "S104",
+  "S105",
+  "S106",
+  "SLF001",
+  "SIM102",
+  "PERF401",
+  "ARG002",
+  "S311",
+  "TRY301",
+  "PLR0912",
+  "B904",
+  "S324",
+  "ERA001",
+  "C901",
+  "S304",
+  "TRY300",
+  "S608",
+  "ANN204",
+]
+
+select = ["ALL"]
+# Official style: multi-line docstring summary on the second line.
+extend-select = ["D213"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.pylint]
+max-args = 10
+max-branches = 25
+max-returns = 15
+max-statements = 50
+
+[tool.ruff.format]
+line-ending = "lf"
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.lint.isort]
+known-first-party = ["bilibili"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
+
+[tool.mypy]
+platform = "linux"
+python_version = "3.14"
+follow_imports = "silent"
+ignore_missing_imports = true
+check_untyped_defs = true
+disable_error_code = [
+  "annotation-unchecked",
+  "import-not-found",
+  "import-untyped",
+]
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+enable_error_code = [
+  "ignore-without-code",
+  "redundant-self",
+  "truthy-iterable",
+]
+extra_checks = false
+files = ["provider/bilibili", "tests"]
+local_partial_types = true
+mypy_path = "provider"
+no_implicit_optional = true
+no_implicit_reexport = true
+show_error_codes = true
+strict_equality = true
+strict_optional = true
+warn_incomplete_stub = true
+warn_no_return = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+timeout = 120
+filterwarnings = [
+  "ignore:coroutine.*was never awaited:RuntimeWarning",
+]
 markers = [
   "live: tests that hit the real Bilibili API (excluded by default)",
 ]
-
-[tool.ruff]
-target-version = "py314"
-line-length = 100
-extend-exclude = [".refs", ".dev-data"]
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
-ignore = ["E501", "RUF001"]
-
-[tool.mypy]
-python_version = "3.14"
-ignore_missing_imports = true

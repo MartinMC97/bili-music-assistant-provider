@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
-import pytest
 from bilibili import wbi
+
+if TYPE_CHECKING:
+    import pytest
 
 IMG_KEY = "7cd084941338484aae1ad9425b84077c"
 SUB_KEY = "4932caff0ff746eab6f01bf08b70ac45"
-GOLDEN_PARAMS = {
+GOLDEN_PARAMS: dict[str, str | int] = {
     "search_type": "video",
     "keyword": "周杰伦 晴天",
     "page": 1,
@@ -99,7 +102,7 @@ def test_sign_params_quotes_reserved_characters_once() -> None:
 
 def test_sign_params_auto_wts(monkeypatch: pytest.MonkeyPatch) -> None:
     """Without an explicit wts the current Unix timestamp is used."""
-    monkeypatch.setattr(wbi.time, "time", lambda: 1700000000.9)
+    monkeypatch.setattr("time.time", lambda: 1700000000.9)
     signed = wbi.sign_params(GOLDEN_PARAMS, IMG_KEY, SUB_KEY)
     assert "wts=1700000000" in signed
     assert signed.count("wts=") == 1

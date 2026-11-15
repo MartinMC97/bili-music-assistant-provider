@@ -1,6 +1,6 @@
 # 模块契约 v1（开发团队共用）
 
-目标：MA **2.10.8**（兼容 2.10.7），`music-assistant-models==1.1.205`，Python 3.14。
+目标：MA **2.10.11**（兼容 2.10.7+），`music-assistant-models==1.1.205`，Python 3.14。
 所有实现必须能在 MA 2.10.x 的 `MusicProvider` 单类 API 下工作；**不要 import `music_assistant.models.media_capabilities`**。
 
 ## 文件所有权（避免并行冲突）
@@ -17,7 +17,7 @@
 | `provider/bilibili/catalog.py` | agent-catalog | 收藏夹、推荐、browse 辅助函数 |
 | `provider/bilibili/collections.py` | lead | UP 合集（season）：查询解析、分页、列表 |
 | `provider/bilibili/__init__.py` | agent-provider | provider 类与 feature 方法 |
-| `tests/unit/*` | 各自模块作者 + agent-tests | 单元测试 |
+| `tests/providers/bilibili/*` | 各自模块作者 + agent-tests | provider 单元测试（官方要求按 provider 分目录） |
 | `docker/*`、`scripts/*`、`README.md` | lead | 环境与分发 |
 
 > 每个 agent 只改自己名下的文件；需要改别人的文件时，在 `docs/devlog.md` 里记一条 TODO，交给 lead。

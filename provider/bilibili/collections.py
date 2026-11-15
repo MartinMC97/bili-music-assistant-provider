@@ -1,4 +1,5 @@
-"""Bilibili UP collections (合集 / UGC season) as Music Assistant playlists.
+"""
+Bilibili UP collections (合集 / UGC season) as Music Assistant playlists.
 
 A collection is Bilibili's ``ugc_season``: a curated, ordered list of videos
 owned by one UP.  It maps naturally onto a Music Assistant ``Playlist``:
@@ -24,7 +25,6 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from music_assistant_models.errors import MediaNotFoundError
-from music_assistant_models.media_items import Playlist, Track
 
 from . import constants, parsers
 from .client import BiliApiError
@@ -32,26 +32,29 @@ from .client import BiliApiError
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+    from music_assistant_models.media_items import Playlist, Track
+
     from .client import BilibiliClient
 
 #: Collection URL: https://space.bilibili.com/<mid>/lists/<season_id>?type=season
 #: Music Assistant replaces "/" with " " before a query reaches a provider, so
 #: the pattern accepts whitespace as separator as well.
-_LISTS_URL_RE = re.compile(r"space\.bilibili\.com\s+\d+\s+lists\s+(\d+)", re.I)
+_LISTS_URL_RE = re.compile(r"space\.bilibili\.com\s+\d+\s+lists\s+(\d+)", re.IGNORECASE)
 #: Older collection URL: /channel/collectiondetail?sid=<season_id>
-_COLLECTION_DETAIL_RE = re.compile(r"collectiondetail\?\S*?\bsid=(\d+)", re.I)
+_COLLECTION_DETAIL_RE = re.compile(r"collectiondetail\?\S*?\bsid=(\d+)", re.IGNORECASE)
 #: Explicit prefixes.
-_SEASON_PREFIX_RE = re.compile(r"^bseason\s*:\s*(\d+)$", re.I)
-_UP_PREFIX_RE = re.compile(r"^up\s*:\s*(\d+)$", re.I)
+_SEASON_PREFIX_RE = re.compile(r"^bseason\s*:\s*(\d+)$", re.IGNORECASE)
+_UP_PREFIX_RE = re.compile(r"^up\s*:\s*(\d+)$", re.IGNORECASE)
 #: UP space URL (optionally with a trailing tab, e.g. "/video").
-_UP_URL_RE = re.compile(r"^https?\s*:?\s*space\.bilibili\.com\s+(\d+)(?:\s+\S+)*$", re.I)
+_UP_URL_RE = re.compile(r"^https?\s*:?\s*space\.bilibili\.com\s+(\d+)(?:\s+\S+)*$", re.IGNORECASE)
 
 #: Upper bound for collection list pagination (guards against API loops).
 MAX_LIST_PAGES: int = 20
 
 
 def _normalize(query: str) -> str:
-    """Collapse whitespace and treat ``/`` as a separator.
+    """
+    Collapse whitespace and treat ``/`` as a separator.
 
     Handles both the raw query and the form Music Assistant passes to providers
     (it replaces ``/`` with a space).
@@ -86,7 +89,7 @@ def season_id_from_query(query: str) -> str | None:
     if match:
         # "type=series" addresses a series (not supported here) - ignore it so
         # the query falls back to a normal music search instead.
-        if re.search(r"type\s*=\s*series", text, re.I):
+        if re.search(r"type\s*=\s*series", text, re.IGNORECASE):
             return None
         return match.group(1)
 
@@ -115,16 +118,16 @@ def up_mid_from_query(query: str) -> str | None:
 def season_id_from_item_id(item_id: str) -> str | None:
     """Return the collection id encoded in a ``season:<id>`` item id."""
     raw = str(item_id or "").strip()
-    suffix = raw[len(constants.COLLECTION_PLAYLIST_PREFIX) :] if raw.startswith(
-        constants.COLLECTION_PLAYLIST_PREFIX
-    ) else ""
+    suffix = (
+        raw[len(constants.COLLECTION_PLAYLIST_PREFIX) :]
+        if raw.startswith(constants.COLLECTION_PLAYLIST_PREFIX)
+        else ""
+    )
     return suffix if suffix.isdigit() else None
 
 
 def season_id_from_view(data: dict[str, Any]) -> str | None:
     """Return the collection id of a ``/x/web-interface/view`` payload, if any."""
-    if not isinstance(data, dict):
-        return None
     season = data.get("ugc_season")
     if not isinstance(season, dict):
         return None
@@ -133,13 +136,12 @@ def season_id_from_view(data: dict[str, Any]) -> str | None:
 
 
 def collection_from_view(data: dict[str, Any]) -> dict[str, Any] | None:
-    """Return a ``meta``-shaped dict from a view payload's ``ugc_season`` block.
+    """
+    Return a ``meta``-shaped dict from a view payload's ``ugc_season`` block.
 
     The view payload has no owner name; the caller fills in ``mid`` only, which
     is enough to look the owner up later.
     """
-    if not isinstance(data, dict):
-        return None
     season = data.get("ugc_season")
     if not isinstance(season, dict):
         return None
@@ -207,9 +209,7 @@ async def collection_page(
     archives = data.get("archives") if isinstance(data, dict) else None
     tracks: list[Track] = []
     for item in archives or ():
-        track = parsers.parse_collection_archive(
-            item, provider_instance, owner_name, owner_mid
-        )
+        track = parsers.parse_collection_archive(item, provider_instance, owner_name, owner_mid)
         if track is None:
             continue
         track.position = page * constants.COLLECTION_PAGE_SIZE + len(tracks) + 1
@@ -258,9 +258,7 @@ async def list_up_collections(
         try:
             data = await client.space_collections(int(mid), page=page, page_size=20)
         except (BiliApiError, ValueError) as err:
-            raise MediaNotFoundError(
-                f"Bilibili UP {mid} collections are unavailable"
-            ) from err
+            raise MediaNotFoundError(f"Bilibili UP {mid} collections are unavailable") from err
 
         items = data.get("items_lists") if isinstance(data, dict) else None
         if not isinstance(items, dict):

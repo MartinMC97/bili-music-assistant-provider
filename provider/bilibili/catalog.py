@@ -1,4 +1,5 @@
-"""Favorites, recommendations and browse helpers for the Bilibili provider.
+"""
+Favorites, recommendations and browse helpers for the Bilibili provider.
 
 The catalog layer only translates client payloads into Music Assistant models
 through the helpers in :mod:`bilibili.parsers`; it never builds models from raw
@@ -11,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator, Callable, Sequence
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from music_assistant_models.errors import MediaNotFoundError
 from music_assistant_models.media_items import (
@@ -146,7 +147,8 @@ def _browse_key(path: str) -> str:
 async def iter_favorite_playlists(
     client: BilibiliClient, provider_instance: str
 ) -> AsyncIterator[Playlist]:
-    """Yield the user's own and collected favorite folders.
+    """
+    Yield the user's own and collected favorite folders.
 
     Anonymous credentials yield nothing at all (no request is made) so the
     library can load normally without login.
@@ -204,7 +206,8 @@ async def get_favorite_tracks(
     playlist_id: str,
     page: int = 0,
 ) -> list[Track]:
-    """Return one page (``page`` is zero based) of a favorite folder's tracks.
+    """
+    Return one page (``page`` is zero based) of a favorite folder's tracks.
 
     The provider loops over pages itself; this function only fetches the
     requested page.  Positions start at ``page * 20 + 1`` and stay contiguous
@@ -237,7 +240,8 @@ async def iter_favorite_tracks(
     playlist_id: str,
     max_tracks: int = 2000,
 ) -> AsyncIterator[Track]:
-    """Yield every playable track of a favorite folder, skipping empty pages.
+    """
+    Yield every playable track of a favorite folder, skipping empty pages.
 
     MA stops iterating a playlist on the first empty page, so an all-invalid
     page must not terminate the listing. Positions are assigned globally and
@@ -301,7 +305,10 @@ async def recommendation_items(
     else:
         raise MediaNotFoundError(f"Unknown Bilibili recommendation row: {row_id!r}")
 
-    return _parse_tracks(_as_list(items), parser, provider_instance)
+    return cast(
+        "UniqueList[MediaItemType | ItemMapping | BrowseFolder]",
+        _parse_tracks(_as_list(items), parser, provider_instance),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +317,8 @@ async def recommendation_items(
 async def browse_items(
     client: BilibiliClient, provider_instance: str, path: str
 ) -> Sequence[MediaItemType | ItemMapping | BrowseFolder]:
-    """Return the browse tree.
+    """
+    Return the browse tree.
 
     The root (empty path or ``bilibili://``) lists the three folders; the
     ``rank``, ``new`` and ``favorites`` children return their contents.

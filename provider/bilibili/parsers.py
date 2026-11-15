@@ -1,4 +1,5 @@
-"""Convert Bilibili API payloads into Music Assistant models.
+"""
+Convert Bilibili API payloads into Music Assistant models.
 
 Everything in this module is pure and synchronous: it never performs I/O and
 never raises for malformed list entries (those are skipped by returning
@@ -32,12 +33,12 @@ FAV_FOLDER_URL = f"{BILIBILI_WEB}/medialist/detail/ml{{folder_id}}"
 
 _HTML_TAG_RE = re.compile(r"<[^>]*>")
 _BRACKET_TAG_RE = re.compile(r"【([^】]*)】")
-_EMPTY_PARENS_RE = re.compile(r"[（(]\s*[)）]")
+_EMPTY_PARENS_RE = re.compile(r"[（(]\s*[)）]")  # noqa: RUF001 - Chinese brackets are intentional
 _WHITESPACE_RE = re.compile(r"\s+")
-_SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([,，、;；:：!?！？])")
+_SPACE_BEFORE_PUNCT_RE = re.compile(r"\s+([,，、;；:：!?！？])")  # noqa: RUF001 - Chinese punctuation
 
 # Characters that only ever act as decoration around a Bilibili title.
-_EDGE_JUNK = " \t\r\n-—–_|｜/\\·•,，、;；:："
+_EDGE_JUNK = " \t\r\n-—–_|｜/\\·•,，、;；:："  # noqa: RUF001 - Chinese punctuation
 
 _NOISE_RE = re.compile(
     "|".join(f"(?:{pattern})" for pattern in NOISE_PATTERNS),
@@ -69,14 +70,10 @@ _BRACKET_NOISE_RE = re.compile(
 
 # A few leftovers that NOISE_PATTERNS intentionally leaves alone.
 _EXTRA_NOISE_RE = re.compile(
-    "|".join(
-        (
-            r"(?<![A-Za-z0-9])(?:4k|8k|2160p|1440p|1080p|720p|480p)(?![A-Za-z0-9])",
-            r"(?:高清|超清|修复|重制|完整|正式)\s*版",
-            r"(?<=[\u4e00-\u9fff])\s*(?:mv|pv)(?![A-Za-z])",
-            r"\s+(?:mv|pv)\s*$",
-        )
-    ),
+    r"(?<![A-Za-z0-9])(?:4k|8k|2160p|1440p|1080p|720p|480p)(?![A-Za-z0-9])"
+    r"|(?:高清|超清|修复|重制|完整|正式)\s*版"
+    r"|(?<=[\u4e00-\u9fff])\s*(?:mv|pv)(?![A-Za-z])"
+    r"|\s+(?:mv|pv)\s*$",
     re.IGNORECASE,
 )
 
@@ -92,7 +89,8 @@ def extract_em_tags(raw: str) -> str:
 
 
 def clean_title(raw: str) -> str:
-    """Return a human-friendly track title.
+    """
+    Return a human-friendly track title.
 
     Strips search highlight tags, HTML entities, decorative ``【...】`` labels,
     the noise words from :data:`constants.NOISE_PATTERNS` and redundant
@@ -119,7 +117,7 @@ def clean_title(raw: str) -> str:
     return _WHITESPACE_RE.sub(" ", text).strip()
 
 
-def parse_duration(value: str | int) -> int:
+def parse_duration(value: Any) -> int:
     """Parse a Bilibili duration (``"4:30"``, ``"1:02:03"`` or int) to seconds."""
     if value is None or isinstance(value, bool):
         return 0
@@ -137,8 +135,8 @@ def parse_duration(value: str | int) -> int:
         return 0
 
     total = 0
-    for part in parts:
-        part = part.strip()
+    for raw_part in parts:
+        part = raw_part.strip()
         if not part:
             return 0
         try:
@@ -243,7 +241,7 @@ def _artist(name: Any, mid: Any, provider_instance: str) -> ItemMapping | None:
     )
 
 
-def _build_track(
+def _build_track(  # noqa: PLR0913 - single internal constructor with explicit fields
     *,
     item_id: str,
     provider_instance: str,
@@ -259,7 +257,8 @@ def _build_track(
     date_added: Any = None,
     clean_name: bool = True,
 ) -> Track:
-    """Assemble a Track from already-normalized fields.
+    """
+    Assemble a Track from already-normalized fields.
 
     ``clean_name`` runs the song-title noise cleanup; collection entries pass
     ``False`` because their editorial titles lose meaning when stripped.
@@ -322,14 +321,14 @@ def _parse_video_item(item: dict[str, Any], provider_instance: str) -> Track | N
 # ---------------------------------------------------------------------------
 # public parsers
 # ---------------------------------------------------------------------------
-def parse_search_item(item: dict[str, Any], provider_instance: str) -> Track | None:
+def parse_search_item(item: Any, provider_instance: str) -> Track | None:
     """Convert one ``/wbi/search/type`` video entry; invalid entries -> None."""
     if not isinstance(item, dict):
         return None
     return _parse_video_item(item, provider_instance)
 
 
-def parse_view(data: dict[str, Any], provider_instance: str) -> Track:
+def parse_view(data: Any, provider_instance: str) -> Track:
     """Convert a ``/x/web-interface/view`` payload into a Track."""
     if not isinstance(data, dict):
         data = {}
@@ -355,8 +354,10 @@ def parse_view(data: dict[str, Any], provider_instance: str) -> Track:
     else:
         duration = data.get("duration") or first_page.get("duration")
 
-    owner = data.get("owner") if isinstance(data.get("owner"), dict) else {}
-    stat = data.get("stat") if isinstance(data.get("stat"), dict) else {}
+    raw_owner = data.get("owner")
+    owner: dict[str, Any] = raw_owner if isinstance(raw_owner, dict) else {}
+    raw_stat = data.get("stat")
+    stat: dict[str, Any] = raw_stat if isinstance(raw_stat, dict) else {}
 
     return _build_track(
         item_id=item_id,
@@ -373,7 +374,7 @@ def parse_view(data: dict[str, Any], provider_instance: str) -> Track:
     )
 
 
-def parse_fav_item(item: dict[str, Any], provider_instance: str) -> Track | None:
+def parse_fav_item(item: Any, provider_instance: str) -> Track | None:
     """Convert one favorite media entry; unavailable items (attr != 0) -> None."""
     if not isinstance(item, dict):
         return None
@@ -387,7 +388,8 @@ def parse_fav_item(item: dict[str, Any], provider_instance: str) -> Track | None
     if not bvid or not raw_title:
         return None
 
-    upper = item.get("upper") if isinstance(item.get("upper"), dict) else {}
+    raw_upper = item.get("upper")
+    upper: dict[str, Any] = raw_upper if isinstance(raw_upper, dict) else {}
     return _build_track(
         item_id=bvid,
         provider_instance=provider_instance,
@@ -405,13 +407,13 @@ def parse_fav_item(item: dict[str, Any], provider_instance: str) -> Track | None
 
 
 def parse_fav_folder(
-    item: dict[str, Any],
+    item: Any,
     provider_instance: str,
     owner_name: str,
 ) -> Playlist:
     """Convert one favorite folder entry into a Playlist."""
     if not isinstance(item, dict):
-        raise ValueError("favorite folder payload must be a dict")
+        raise TypeError("favorite folder payload must be a dict")
 
     folder_id = _text(item.get("id"))
     if not folder_id:
@@ -439,8 +441,9 @@ def parse_fav_folder(
     )
 
 
-def parse_music_center_item(item: dict[str, Any], provider_instance: str) -> Track | None:
-    """Convert a music-center entry, falling back to its ``related_archive``.
+def parse_music_center_item(item: Any, provider_instance: str) -> Track | None:
+    """
+    Convert a music-center entry, falling back to its ``related_archive``.
 
     The music-centre ``cid`` is a music metadata id, not the video page cid that
     ``/x/player/playurl`` expects. Keep only the video id and let
@@ -450,7 +453,8 @@ def parse_music_center_item(item: dict[str, Any], provider_instance: str) -> Tra
     if not isinstance(item, dict):
         return None
 
-    archive = item.get("related_archive") if isinstance(item.get("related_archive"), dict) else {}
+    raw_archive = item.get("related_archive")
+    archive: dict[str, Any] = raw_archive if isinstance(raw_archive, dict) else {}
 
     bvid = _text(item.get("bvid")) or _text(archive.get("bvid"))
     aid = _text(item.get("aid")) or _text(archive.get("aid"))
@@ -485,7 +489,7 @@ def parse_music_center_item(item: dict[str, Any], provider_instance: str) -> Tra
     )
 
 
-def parse_ranking_item(item: dict[str, Any], provider_instance: str) -> Track | None:
+def parse_ranking_item(item: Any, provider_instance: str) -> Track | None:
     """Convert one ranking entry; invalid entries -> None."""
     if not isinstance(item, dict):
         return None
@@ -500,11 +504,12 @@ UP_SPACE_URL = "https://space.bilibili.com/{mid}"
 
 
 def parse_collection(
-    meta: dict[str, Any],
+    meta: Any,
     provider_instance: str,
     owner_name: str = "",
 ) -> Playlist | None:
-    """Convert a collection ``meta`` object into a Playlist.
+    """
+    Convert a collection ``meta`` object into a Playlist.
 
     The payload is the ``meta`` block of ``seasons_archives_list`` or the
     ``seasons_list[].meta`` block of ``seasons_series_list``; both share the
@@ -554,12 +559,13 @@ def parse_collection(
 
 
 def parse_collection_archive(
-    item: dict[str, Any],
+    item: Any,
     provider_instance: str,
     owner_name: str = "",
     owner_mid: Any = None,
 ) -> Track | None:
-    """Convert one collection archive entry into a Track.
+    """
+    Convert one collection archive entry into a Track.
 
     Archives carry no cid; :meth:`BilibiliProvider.get_stream_details` resolves
     it lazily from the view payload, exactly like search results do.
@@ -570,7 +576,8 @@ def parse_collection_archive(
     raw_title = _text(item.get("title"))
     if not bvid or not raw_title:
         return None
-    stat = item.get("stat") if isinstance(item.get("stat"), dict) else {}
+    raw_stat = item.get("stat")
+    stat: dict[str, Any] = raw_stat if isinstance(raw_stat, dict) else {}
     return _build_track(
         item_id=bvid,
         provider_instance=provider_instance,
@@ -587,7 +594,7 @@ def parse_collection_archive(
     )
 
 
-def parse_up_card(data: dict[str, Any]) -> tuple[str, Any] | None:
+def parse_up_card(data: Any) -> tuple[str, Any] | None:
     """Return ``(name, mid)`` from a ``/x/web-interface/card`` payload."""
     card = data.get("card") if isinstance(data, dict) else None
     if not isinstance(card, dict):

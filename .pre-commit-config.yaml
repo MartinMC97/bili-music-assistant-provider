@@ -1,0 +1,24 @@
+# Local hooks mirror the checks music-assistant/server runs on a provider.
+# Install once with: pre-commit install (needs the dev dependencies from pyproject).
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.22
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^(provider|tests)/
+      - id: ruff-format
+        files: ^(provider|tests)/
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.3
+    hooks:
+      - id: codespell
+        additional_dependencies: []
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict)
+        entry: python -m mypy
+        language: system
+        types: [python]
+        pass_filenames: false

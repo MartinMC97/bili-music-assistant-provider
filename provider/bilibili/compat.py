@@ -16,9 +16,10 @@ def check_compat() -> list[str]:
 
     if "extra_input_args" not in {field.name for field in fields(StreamDetails)}:
         issues.append(
-            "music-assistant-models 缺少 StreamDetails.extra_input_args，"
-            "无法向 ffmpeg 注入 Referer/User-Agent。"
-            f"需要 MA >= {MIN_MA_VERSION}（models >= {MIN_MODELS_VERSION}）。"
+            "music-assistant-models is missing StreamDetails.extra_input_args, "
+            "so ffmpeg cannot receive the Referer/User-Agent headers. "
+            f"Music Assistant >= {MIN_MA_VERSION} is required "
+            f"(models >= {MIN_MODELS_VERSION})."
         )
 
     return issues

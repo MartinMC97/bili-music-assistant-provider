@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
-from bilibili import catalog
-from bilibili.auth import BilibiliCredential
 from music_assistant_models.errors import MediaNotFoundError
 from music_assistant_models.media_items import (
     BrowseFolder,
@@ -18,7 +17,11 @@ from music_assistant_models.media_items import (
     UniqueList,
 )
 
-FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+from bilibili import catalog
+from bilibili.auth import BilibiliCredential
+from bilibili.client import BilibiliClient
+
+FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 PROVIDER = "bilibili_test"
 LOGIN = BilibiliCredential(sessdata="sess", bili_jct="jct", dedeuserid="42")
 ANONYMOUS = BilibiliCredential()
@@ -29,7 +32,7 @@ def load_fixture(name: str) -> Any:
     return json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
 
 
-class FakeClient:
+class FakeClient(BilibiliClient):
     """Stand-in for :class:`bilibili.client.BilibiliClient` with canned payloads."""
 
     def __init__(
@@ -43,6 +46,8 @@ class FakeClient:
         new_music_items: list[Any] | None = None,
         region_items: list[Any] | None = None,
     ) -> None:
+        """Store the canned payloads used by the fake client."""
+        super().__init__(SimpleNamespace(http_session=None), credential or LOGIN)
         self.credential = credential if credential is not None else LOGIN
         self.folders = load_fixture("fav_folders")["data"]["list"] if folders is None else folders
         self.collected_pages = collected_pages or [{"list": [], "has_more": False}]
@@ -256,7 +261,8 @@ async def test_get_favorite_tracks_skips_parser_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A parser exception on one entry does not abort the page."""
-    original = catalog.parse_fav_item
+    # re-exported by catalog so the test can inject a failing parser
+    original = catalog.parse_fav_item  # type: ignore[attr-defined]
 
     def flaky_parser(item: Any, provider_instance: str) -> Track | None:
         if isinstance(item, dict) and item.get("bvid") == "BOOM":
@@ -322,8 +328,9 @@ async def test_recommendation_items_new_music() -> None:
     items = await catalog.recommendation_items(client, PROVIDER, "new_music")
 
     assert len(items) == 5
-    assert items[0].name == "AIYOU"
-    assert items[0].artists[0].name == "Eve"
+    first_track = cast("Track", items[0])
+    assert first_track.name == "AIYOU"
+    assert first_track.artists[0].name == "Eve"
     assert client.calls == [("new_music",)]
 
 
@@ -334,9 +341,11 @@ async def test_recommendation_items_region_music() -> None:
     items = await catalog.recommendation_items(client, PROVIDER, "region_music")
 
     assert len(items) == 5
-    assert items[0].item_id == "BV17VZpY1ENA"
-    assert items[0].duration == 15
-    assert items[2].duration == 3619
+    first_track = cast("Track", items[0])
+    third_track = cast("Track", items[2])
+    assert first_track.item_id == "BV17VZpY1ENA"
+    assert first_track.duration == 15
+    assert third_track.duration == 3619
     assert client.calls == [("ranking_region", 3, 3)]
 
 
@@ -373,8 +382,9 @@ async def test_browse_root_returns_three_folders() -> None:
 
         assert len(items) == 3
         assert all(isinstance(item, BrowseFolder) for item in items)
-        assert [item.item_id for item in items] == ["rank", "new", "favorites"]
-        assert [item.path for item in items] == [
+        folders = cast("list[BrowseFolder]", items)
+        assert [item.item_id for item in folders] == ["rank", "new", "favorites"]
+        assert [item.path for item in folders] == [
             f"{PROVIDER}://rank",
             f"{PROVIDER}://new",
             f"{PROVIDER}://favorites",

@@ -1,4 +1,5 @@
-"""Live smoke test against the real Bilibili API.
+"""
+Live smoke test against the real Bilibili API.
 
 Excluded from normal runs: the module is skipped unless ``RUN_LIVE=1`` is set in
 the environment. It walks the same path as the provider (search -> view ->
@@ -13,6 +14,7 @@ from typing import Any
 
 import aiohttp
 import pytest
+
 from bilibili import constants
 from bilibili.auth import BilibiliCredential
 from bilibili.client import BilibiliClient
@@ -55,7 +57,8 @@ def pick_audio_url(dash: dict[str, Any]) -> str:
         ),
     )
     url = best.get("baseUrl") or best.get("base_url") or best.get("url")
-    assert isinstance(url, str) and url, "the selected audio candidate has no URL"
+    assert isinstance(url, str)
+    assert url, "the selected audio candidate has no URL"
     return url
 
 

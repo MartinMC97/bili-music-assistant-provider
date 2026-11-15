@@ -130,7 +130,7 @@ UP_PROFILE_TTL: Final = 3600
 # much hurts lyrics matching and search relevance.
 NOISE_PATTERNS: Final = (
     r"【[^】]{0,40}(?:无损|高音质|hi-?res|4k|8k|修复|官方|完整版|纯享|动态歌词|歌词|字幕)[^】]{0,40}】",
-    r"[（(]\s*(?:官方\s*)?(?:mv|music\s*video|lyrics?|audio|live|cover|remix|ver\.?|version)\s*[)）]",
+    r"[（(]\s*(?:官方\s*)?(?:mv|music\s*video|lyrics?|audio|live|cover|remix|ver\.?|version)\s*[)）]",  # noqa: RUF001 - Chinese brackets are intentional
     r"官方\s*(?:mv|music\s*video|音频|完整版)",
     r"高音质|无损音质|hi-?res|动态歌词|歌词版|完整版|纯享版|纯享|超清|高清修复|重制版",
     r"中日字幕|双语字幕|中文字幕|字幕",

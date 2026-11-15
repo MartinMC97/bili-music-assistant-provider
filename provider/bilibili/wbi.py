@@ -1,4 +1,5 @@
-"""WBI request signing for the Bilibili web API.
+"""
+WBI request signing for the Bilibili web API.
 
 Bilibili protects a number of endpoints (search, space videos, ...) with a
 signature derived from the ``wbi_img`` keys returned by ``/x/web-interface/nav``.
@@ -115,7 +116,8 @@ def sign_params(
     *,
     wts: int | None = None,
 ) -> str:
-    """Return the full signed query string including ``wts`` and ``w_rid``.
+    """
+    Return the full signed query string including ``wts`` and ``w_rid``.
 
     The caller must send the returned string verbatim (do not re-encode it).
     """

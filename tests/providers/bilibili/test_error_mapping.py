@@ -1,4 +1,5 @@
-"""Error translation tests: Bilibili failures -> Music Assistant exceptions.
+"""
+Error translation tests: Bilibili failures -> Music Assistant exceptions.
 
 Covers the provider's ``BiliApiError`` mapping table, the wiring through a public
 provider method, and the client's offline network/HTTP error translation.
@@ -9,13 +10,10 @@ from __future__ import annotations
 
 import copy
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any, Self, cast
 
 import aiohttp
 import pytest
-from bilibili import BilibiliProvider
-from bilibili.auth import BilibiliCredential
-from bilibili.client import BiliApiError, BilibiliClient
 from music_assistant_models.config_entries import ProviderConfig
 from music_assistant_models.enums import MediaType, ProviderStage, ProviderType
 from music_assistant_models.errors import (
@@ -24,6 +22,10 @@ from music_assistant_models.errors import (
     ResourceTemporarilyUnavailable,
     UnplayableMediaError,
 )
+
+from bilibili import BilibiliProvider
+from bilibili.auth import BilibiliCredential
+from bilibili.client import BiliApiError, BilibiliClient
 
 PROVIDER = "bilibili_error_mapping"
 MANIFEST = SimpleNamespace(
@@ -113,7 +115,7 @@ class FakeMassConfig:
 
     def get_raw_provider_config_value(self, instance_id: str, key: str) -> None:
         """No raw overrides: config entries resolve to their defaults."""
-        return None
+        return
 
 
 class FakeMass:
@@ -126,6 +128,11 @@ class FakeMass:
         self.config = FakeMassConfig()
 
 
+if TYPE_CHECKING:
+    from music_assistant.mass import MusicAssistant
+    from music_assistant_models.provider import ProviderManifest
+
+
 async def make_provider(error: Exception) -> BilibiliProvider:
     """Build a provider whose search endpoint raises *error*."""
     config = ProviderConfig(
@@ -134,10 +141,12 @@ async def make_provider(error: Exception) -> BilibiliProvider:
         instance_id=PROVIDER,
         values={},
     )
-    provider = BilibiliProvider(FakeMass(), MANIFEST, config)
+    provider = BilibiliProvider(
+        cast("MusicAssistant", FakeMass()), cast("ProviderManifest", MANIFEST), config
+    )
     for entry in await provider.get_config_entries():
         config.values[entry.key] = copy.deepcopy(entry)
-    provider._client = RaisingClient(error)
+    provider._client = cast("BilibiliClient", RaisingClient(error))
     return provider
 
 
@@ -184,7 +193,7 @@ class FakeResponse:
         self.cookies: dict[str, str] = {}
         self.headers: dict[str, str] = {}
 
-    async def __aenter__(self) -> FakeResponse:
+    async def __aenter__(self) -> Self:
         """Enter the context manager."""
         return self
 
