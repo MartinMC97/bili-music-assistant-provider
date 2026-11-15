@@ -3,7 +3,7 @@
   "domain": "bilibili",
   "stage": "alpha",
   "name": "Bilibili",
-  "description": "Bilibili 视频音轨作为音乐源（非官方，只读）",
+  "description": "Bilibili video audio as a music source (unofficial, read-only).",
   "codeowners": [
     "@MartinMC97"
   ],

@@ -54,16 +54,16 @@ BROWSE_FAVORITES: Final = "favorites"
 
 #: (item_id, display name, material design icon) for the home screen rows.
 _RECOMMENDATION_ROWS: Final = (
-    (RANK_MUSIC_ROW, "音乐综合榜", "mdi-chart-line"),
-    (NEW_MUSIC_ROW, "新歌", "mdi-new-box"),
-    (REGION_MUSIC_ROW, "分区榜", "mdi-map-music"),
+    (RANK_MUSIC_ROW, "Music chart", "mdi-chart-line"),
+    (NEW_MUSIC_ROW, "New releases", "mdi-new-box"),
+    (REGION_MUSIC_ROW, "Regional chart", "mdi-map-music"),
 )
 
 #: (item_id/path, display name) for the browse tree children.
 _BROWSE_FOLDERS: Final = (
-    (BROWSE_RANK, "排行榜"),
-    (BROWSE_NEW, "新歌"),
-    (BROWSE_FAVORITES, "收藏夹"),
+    (BROWSE_RANK, "Charts"),
+    (BROWSE_NEW, "New releases"),
+    (BROWSE_FAVORITES, "Favorites"),
 )
 
 # The music region on Bilibili (rid=3 is 音乐).
@@ -282,6 +282,7 @@ def recommendation_rows(provider_instance: str) -> list[RecommendationFolder]:
             item_id=item_id,
             provider=provider_instance,
             name=name,
+            translation_key=item_id,
             icon=icon,
         )
         for item_id, name, icon in _RECOMMENDATION_ROWS
@@ -331,6 +332,7 @@ async def browse_items(
                 item_id=item_id,
                 provider=provider_instance,
                 name=name,
+                translation_key=item_id,
                 # MA's music/browse command expects "<instance>://<sub_path>";
                 # a bare key makes the controller fail to unpack the path.
                 path=f"{provider_instance}://{item_id}",

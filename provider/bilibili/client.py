@@ -174,145 +174,6 @@ class BilibiliClient:
     async def close(self) -> None:
         """Do nothing: ``mass.http_session`` is shared and outlives the provider."""
 
-    def _headers(self, referer: str = constants.BILI_REFERER) -> dict[str, str]:
-        """Build request headers, adding the credential cookie when logged in."""
-        headers = {
-            "Referer": referer,
-            "Origin": referer,
-            "User-Agent": constants.USER_AGENT,
-            "Accept": "application/json, text/plain, */*",
-        }
-        cookie = self.credential.cookie_header()
-        if cookie:
-            headers["Cookie"] = cookie
-        return headers
-
-    def _build_url(
-        self,
-        base: str,
-        path: str,
-        params: Mapping[str, object] | None = None,
-        *,
-        query: str | None = None,
-    ) -> URL:
-        """
-        Build an already-encoded URL.
-
-        ``encoded=True`` is essential for WBI requests: the signed query must be
-        sent byte for byte and must not be encoded a second time by yarl.
-        """
-        if query is None:
-            query = "&".join(
-                f"{quote(str(key), safe='')}={quote(str(value), safe='')}"
-                for key, value in (params or {}).items()
-            )
-        url = f"{base}{path}"
-        if query:
-            url = f"{url}?{query}"
-        return URL(url, encoded=True)
-
-    async def _fetch(
-        self,
-        url: URL,
-        endpoint: str,
-        referer: str = constants.BILI_REFERER,
-    ) -> tuple[dict[str, Any], dict[str, str]]:
-        """Perform one GET request and return the decoded payload and cookies."""
-        # Never log the full URL: it contains search keywords and signatures.
-        self.logger.debug("GET %s", endpoint)
-        try:
-            async with self.mass.http_session.get(
-                url, headers=self._headers(referer), timeout=_REQUEST_TIMEOUT
-            ) as response:
-                status = int(getattr(response, "status", 200))
-                cookies = _response_cookies(response)
-                payload = await _read_json(response)
-        except TimeoutError as err:
-            raise ResourceTemporarilyUnavailable(
-                f"Timeout while requesting {endpoint}", backoff_time=_NETWORK_BACKOFF
-            ) from err
-        except aiohttp.ClientError as err:
-            raise ResourceTemporarilyUnavailable(
-                f"Connection error while requesting {endpoint}", backoff_time=_NETWORK_BACKOFF
-            ) from err
-
-        if status >= 500:
-            raise ResourceTemporarilyUnavailable(
-                f"Bilibili server error {status} at {endpoint}",
-                backoff_time=_SERVER_BACKOFF,
-            )
-        if status == 429:
-            raise ResourceTemporarilyUnavailable(
-                f"Bilibili rate limited the request at {endpoint}",
-                backoff_time=_SERVER_BACKOFF,
-            )
-        if status == 412:
-            # The risk-control response is usually HTML, but the provider maps
-            # this code to a longer backoff, so keep it in the API error shape.
-            raise BiliApiError(-412, "request was rejected", endpoint)
-        if not isinstance(payload, dict):
-            if status >= 400:
-                raise BiliApiError(-status, f"HTTP {status}", endpoint)
-            raise BiliApiError(-1, "invalid JSON response", endpoint)
-        if status >= 400:
-            code = _coerce_int(payload.get("code"), -status)
-            raise BiliApiError(code, _message(payload) or f"HTTP {status}", endpoint)
-        return payload, cookies
-
-    async def _request(
-        self,
-        url: URL,
-        endpoint: str,
-        *,
-        allowed_codes: frozenset[int] = frozenset(),
-        extra_throttler: Throttler | None = None,
-        referer: str = constants.BILI_REFERER,
-    ) -> tuple[dict[str, Any], dict[str, str]]:
-        """Get a JSON payload, enforcing throttling and the API ``code``."""
-        if extra_throttler is None:
-            async with self._api_throttler:
-                payload, cookies = await self._fetch(url, endpoint, referer)
-        else:
-            async with self._api_throttler, extra_throttler:
-                payload, cookies = await self._fetch(url, endpoint, referer)
-
-        code = _coerce_int(payload.get("code"), 0)
-        if code != 0 and code not in allowed_codes:
-            raise BiliApiError(code, _message(payload), endpoint)
-        return payload, cookies
-
-    # ------------------------------------------------------------------
-    # WBI
-    # ------------------------------------------------------------------
-    async def _get_wbi_keys(self) -> tuple[str, str]:
-        """Return cached WBI keys, refreshing them every six hours."""
-        now = time.monotonic()
-        if self._wbi_img_key and self._wbi_sub_key and now < self._wbi_expires_at:
-            return self._wbi_img_key, self._wbi_sub_key
-
-        async with self._wbi_lock:
-            # Another coroutine may have refreshed the keys while we waited.
-            now = time.monotonic()
-            if self._wbi_img_key and self._wbi_sub_key and now < self._wbi_expires_at:
-                return self._wbi_img_key, self._wbi_sub_key
-
-            data = await self.nav()
-            wbi_img = data.get("wbi_img")
-            img_key = sub_key = ""
-            if isinstance(wbi_img, dict):
-                img_key = _extract_key(str(wbi_img.get("img_url") or ""))
-                sub_key = _extract_key(str(wbi_img.get("sub_url") or ""))
-            if not img_key or not sub_key:
-                raise BiliApiError(-1, "nav response did not contain WBI keys", _NAV_PATH)
-
-            self._wbi_img_key = img_key
-            self._wbi_sub_key = sub_key
-            self._wbi_expires_at = time.monotonic() + constants.WBI_CACHE_TTL
-            return img_key, sub_key
-
-    # ------------------------------------------------------------------
-    # public API
-    # ------------------------------------------------------------------
     async def nav(self) -> dict[str, Any]:
         """
         Return the nav payload data.
@@ -551,3 +412,143 @@ class BilibiliClient:
                     if name and value is not None:
                         cookies[str(name)] = str(value)
         return code, cookies
+
+    def _headers(self, referer: str = constants.BILI_REFERER) -> dict[str, str]:
+        """Build request headers, adding the credential cookie when logged in."""
+        headers = {
+            "Referer": referer,
+            "Origin": referer,
+            "User-Agent": constants.USER_AGENT,
+            "Accept": "application/json, text/plain, */*",
+        }
+        cookie = self.credential.cookie_header()
+        if cookie:
+            headers["Cookie"] = cookie
+        return headers
+
+    def _build_url(
+        self,
+        base: str,
+        path: str,
+        params: Mapping[str, object] | None = None,
+        *,
+        query: str | None = None,
+    ) -> URL:
+        """
+        Build an already-encoded URL.
+
+        ``encoded=True`` is essential for WBI requests: the signed query must be
+        sent byte for byte and must not be encoded a second time by yarl.
+        """
+        if query is None:
+            query = "&".join(
+                f"{quote(str(key), safe='')}={quote(str(value), safe='')}"
+                for key, value in (params or {}).items()
+            )
+        url = f"{base}{path}"
+        if query:
+            url = f"{url}?{query}"
+        return URL(url, encoded=True)
+
+    async def _fetch(
+        self,
+        url: URL,
+        endpoint: str,
+        referer: str = constants.BILI_REFERER,
+    ) -> tuple[dict[str, Any], dict[str, str]]:
+        """Perform one GET request and return the decoded payload and cookies."""
+        # Never log the full URL: it contains search keywords and signatures.
+        self.logger.debug("GET %s", endpoint)
+        try:
+            async with self.mass.http_session.get(
+                url, headers=self._headers(referer), timeout=_REQUEST_TIMEOUT
+            ) as response:
+                status = int(getattr(response, "status", 200))
+                cookies = _response_cookies(response)
+                payload = await _read_json(response)
+        except TimeoutError as err:
+            raise ResourceTemporarilyUnavailable(
+                f"Timeout while requesting {endpoint}", backoff_time=_NETWORK_BACKOFF
+            ) from err
+        except aiohttp.ClientError as err:
+            raise ResourceTemporarilyUnavailable(
+                f"Connection error while requesting {endpoint}", backoff_time=_NETWORK_BACKOFF
+            ) from err
+
+        if status >= 500:
+            raise ResourceTemporarilyUnavailable(
+                f"Bilibili server error {status} at {endpoint}",
+                backoff_time=_SERVER_BACKOFF,
+            )
+        if status == 429:
+            raise ResourceTemporarilyUnavailable(
+                f"Bilibili rate limited the request at {endpoint}",
+                backoff_time=_SERVER_BACKOFF,
+            )
+        if status == 412:
+            # The risk-control response is usually HTML, but the provider maps
+            # this code to a longer backoff, so keep it in the API error shape.
+            raise BiliApiError(-412, "request was rejected", endpoint)
+        if not isinstance(payload, dict):
+            if status >= 400:
+                raise BiliApiError(-status, f"HTTP {status}", endpoint)
+            raise BiliApiError(-1, "invalid JSON response", endpoint)
+        if status >= 400:
+            code = _coerce_int(payload.get("code"), -status)
+            raise BiliApiError(code, _message(payload) or f"HTTP {status}", endpoint)
+        return payload, cookies
+
+    async def _request(
+        self,
+        url: URL,
+        endpoint: str,
+        *,
+        allowed_codes: frozenset[int] = frozenset(),
+        extra_throttler: Throttler | None = None,
+        referer: str = constants.BILI_REFERER,
+    ) -> tuple[dict[str, Any], dict[str, str]]:
+        """Get a JSON payload, enforcing throttling and the API ``code``."""
+        if extra_throttler is None:
+            async with self._api_throttler:
+                payload, cookies = await self._fetch(url, endpoint, referer)
+        else:
+            async with self._api_throttler, extra_throttler:
+                payload, cookies = await self._fetch(url, endpoint, referer)
+
+        code = _coerce_int(payload.get("code"), 0)
+        if code != 0 and code not in allowed_codes:
+            raise BiliApiError(code, _message(payload), endpoint)
+        return payload, cookies
+
+    # ------------------------------------------------------------------
+    # WBI
+    # ------------------------------------------------------------------
+    async def _get_wbi_keys(self) -> tuple[str, str]:
+        """Return cached WBI keys, refreshing them every six hours."""
+        now = time.monotonic()
+        if self._wbi_img_key and self._wbi_sub_key and now < self._wbi_expires_at:
+            return self._wbi_img_key, self._wbi_sub_key
+
+        async with self._wbi_lock:
+            # Another coroutine may have refreshed the keys while we waited.
+            now = time.monotonic()
+            if self._wbi_img_key and self._wbi_sub_key and now < self._wbi_expires_at:
+                return self._wbi_img_key, self._wbi_sub_key
+
+            data = await self.nav()
+            wbi_img = data.get("wbi_img")
+            img_key = sub_key = ""
+            if isinstance(wbi_img, dict):
+                img_key = _extract_key(str(wbi_img.get("img_url") or ""))
+                sub_key = _extract_key(str(wbi_img.get("sub_url") or ""))
+            if not img_key or not sub_key:
+                raise BiliApiError(-1, "nav response did not contain WBI keys", _NAV_PATH)
+
+            self._wbi_img_key = img_key
+            self._wbi_sub_key = sub_key
+            self._wbi_expires_at = time.monotonic() + constants.WBI_CACHE_TTL
+            return img_key, sub_key
+
+    # ------------------------------------------------------------------
+    # public API
+    # ------------------------------------------------------------------

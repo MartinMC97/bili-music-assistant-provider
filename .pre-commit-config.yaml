@@ -22,3 +22,8 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+      - id: provider-conventions
+        name: provider conventions (upstream parity)
+        entry: python scripts/check_provider_conventions.py
+        language: system
+        pass_filenames: false

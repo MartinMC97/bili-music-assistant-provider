@@ -68,18 +68,8 @@ SUPPORTED_FEATURES = {
     ProviderFeature.BROWSE,
 }
 
-#: Human readable titles for the quality select; values come from constants.
 #: Bilibili video id: ``BV`` + 10 case-sensitive characters, or ``av<aid>``.
 _VIDEO_ID_RE: Final = re.compile(r"(?:BV[0-9A-Za-z]{10}|av\d+)", re.IGNORECASE)
-
-_QUALITY_TITLES: Final = {
-    constants.QUALITY_AUTO: "Auto (best available)",
-    constants.QUALITY_FLAC: "FLAC lossless",
-    constants.QUALITY_DOLBY: "Dolby multi-channel",
-    constants.QUALITY_AAC192: "AAC 192k",
-    constants.QUALITY_AAC132: "AAC 132k",
-    constants.QUALITY_AAC64: "AAC 64k",
-}
 
 #: A playurl URL carries its own expiry timestamp; without one, stay conservative.
 _DEFAULT_STREAM_EXPIRATION: Final = 600
@@ -390,6 +380,290 @@ class BilibiliProvider(MusicProvider):
         if client is not None:
             await client.close()
 
+    async def get_config_entries(self) -> tuple[ConfigEntry, ...]:
+        """Return the provider options; credentials are collected by the setup flow."""
+        return (
+            ConfigEntry(
+                key=constants.CONF_QUALITY,
+                type=ConfigEntryType.STRING,
+                default_value=constants.QUALITY_AUTO,
+                required=True,
+                # Option titles are localized from strings.json
+                # (config_entries.quality.options.<value>).
+                options=[ConfigValueOption(quality) for quality in constants.QUALITY_OPTIONS],
+            ),
+            ConfigEntry(
+                key=constants.CONF_MIN_DURATION,
+                type=ConfigEntryType.INTEGER,
+                default_value=constants.DEFAULT_MIN_DURATION,
+                required=True,
+                range=(0, 36000),
+            ),
+            ConfigEntry(
+                key=constants.CONF_MAX_DURATION,
+                type=ConfigEntryType.INTEGER,
+                default_value=constants.DEFAULT_MAX_DURATION,
+                required=True,
+                range=(0, 36000),
+            ),
+            ConfigEntry(
+                key=constants.CONF_SEARCH_LIMIT,
+                type=ConfigEntryType.INTEGER,
+                default_value=constants.DEFAULT_SEARCH_LIMIT,
+                required=True,
+                range=(1, _SEARCH_PAGE_SIZE_MAX),
+            ),
+            ConfigEntry(
+                key=constants.CONF_VERIFY_STREAM_URL,
+                type=ConfigEntryType.BOOLEAN,
+                default_value=True,
+                required=True,
+            ),
+            ConfigEntry(
+                key=constants.CONF_SESSDATA_MANUAL,
+                type=ConfigEntryType.SECURE_STRING,
+                default_value="",
+                required=False,
+            ),
+            CONF_ENTRY_UNOFFICIAL_PROVIDER,
+        )
+
+    async def search(
+        self,
+        search_query: str,
+        media_types: list[MediaType],
+        limit: int = 5,
+    ) -> SearchResults:
+        """Search Bilibili videos, collections (explicit) and tracks."""
+        query = str(search_query or "").strip()
+        if not query:
+            return SearchResults()
+        explicit = await self._search_explicit(query, media_types)
+        if explicit is not None:
+            return explicit
+        if MediaType.TRACK not in media_types:
+            return SearchResults()
+        if _VIDEO_ID_RE.fullmatch(query):
+            return await self._search_video_id(query, media_types)
+        return await self._search_keyword(query, limit)
+
+    async def get_track(self, prov_track_id: str) -> Track:
+        """Return full details for a ``bvid`` / ``bvid#cid`` track id."""
+        raw = str(prov_track_id or "").strip()
+        base, cid = self._split_track_id(raw)
+        data = await self._view(base)
+
+        try:
+            track = parsers.parse_view(data, self.instance_id)
+        except ValueError as err:
+            raise MediaNotFoundError(f"Bilibili video {base} has no usable metadata") from err
+
+        if cid is not None:
+            page = self._page_for_cid(data, cid)
+            if page is not None:
+                part = str(page.get("part") or "").strip()
+                if part:
+                    # For a multi-part video the page title is the real track name.
+                    track.name = parsers.clean_title(part) or part
+                page_duration = _as_int(page.get("duration"), 0)
+                if page_duration > 0:
+                    track.duration = page_duration
+
+        # Always keep the id the caller asked for (the view payload may point at
+        # the first page of a multi-part video instead).
+        track.item_id = raw
+        for mapping in track.provider_mappings:
+            mapping.item_id = raw
+
+        self._remember_artist_names([track])
+        return track
+
+    async def get_artist(self, prov_artist_id: str) -> Artist:
+        """Return an UP owner from the names seen in search/track payloads."""
+        artist_id = str(prov_artist_id or "").strip()
+        if not artist_id:
+            raise MediaNotFoundError("Bilibili artist id is empty")
+
+        name = self._artist_names.get(artist_id) or f"Bilibili UP 主 {artist_id}"
+        url = f"https://space.bilibili.com/{artist_id}" if artist_id.isdigit() else None
+        return Artist(
+            item_id=artist_id,
+            provider=self.instance_id,
+            name=name,
+            provider_mappings={
+                ProviderMapping(
+                    item_id=artist_id,
+                    provider_domain=constants.PROVIDER_DOMAIN,
+                    provider_instance=self.instance_id,
+                    available=True,
+                    url=url,
+                )
+            },
+        )
+
+    # ------------------------------------------------------------------
+    # playback
+    # ------------------------------------------------------------------
+    async def get_stream_details(self, item_id: str, media_type: MediaType) -> StreamDetails:
+        """Resolve the best playable audio stream for a Bilibili track."""
+        if media_type != MediaType.TRACK:
+            raise MediaNotFoundError(_TRACK_MEDIA_TYPE_ERROR.format(media_type=media_type))
+
+        raw = str(item_id or "").strip()
+        base, cid = self._split_track_id(raw)
+        avid = self._avid(base)
+
+        if cid is None:
+            cid = await self._first_cid(base)
+
+        params: dict[str, Any] = {"avid": avid} if avid is not None else {"bvid": base}
+        try:
+            data = await self._require_client().playurl(**params, cid=cid)
+        except BiliApiError as err:
+            raise self._translate_error(err) from err
+
+        dash = data.get("dash") if isinstance(data, dict) else None
+        if not isinstance(dash, dict):
+            raise UnplayableMediaError(f"Bilibili did not return a DASH audio stream for {raw}")
+
+        candidates = _collect_candidates(dash)
+        if not candidates:
+            raise UnplayableMediaError(f"Bilibili returned no audio candidates for {raw}")
+
+        quality = self._config_str(constants.CONF_QUALITY, constants.QUALITY_AUTO)
+        max_rank = constants.QUALITY_MAX_RANK.get(
+            quality, constants.QUALITY_MAX_RANK[constants.QUALITY_AUTO]
+        )
+        eligible = [stream for stream in candidates if _audio_rank(stream) <= max_rank]
+        if not eligible:
+            # The user set a hard ceiling; do not silently play above it.
+            raise UnplayableMediaError(
+                f"Bilibili has no audio stream at or below quality {quality} for {raw}"
+            )
+        chosen = max(eligible, key=lambda stream: (_audio_rank(stream), stream.bandwidth))
+
+        url = chosen.url
+        if self._config_bool(constants.CONF_VERIFY_STREAM_URL, True):
+            url = await self._select_playable_url(chosen)
+
+        duration = _as_int(dash.get("duration"), 0) or None
+        return StreamDetails(
+            provider=self.instance_id,
+            item_id=raw,
+            media_type=MediaType.TRACK,
+            audio_format=_audio_format(chosen),
+            stream_type=StreamType.HTTP,
+            path=url,
+            duration=duration,
+            can_seek=True,
+            allow_seek=True,
+            expiration=_stream_expiration(url),
+            extra_input_args=list(constants.FFMPEG_HEADERS),
+            data={
+                "host": _host(url),
+                "backup_hosts": [_host(backup) for backup in chosen.backups],
+            },
+        )
+
+    async def get_library_playlists(self) -> AsyncGenerator[Playlist]:
+        """Yield the user's favorite folders; anonymous access yields nothing."""
+        client = self._client
+        if client is None or not client.credential.has_login:
+            return
+        try:
+            async for playlist in catalog.iter_favorite_playlists(client, self.instance_id):
+                yield playlist
+        except BiliApiError as err:
+            if self._handle_auth_error(client, err):
+                return
+            raise self._translate_error(err) from err
+
+    async def get_playlist(self, prov_playlist_id: str) -> Playlist:
+        """Return a favorite folder (``fav:``) or a collection (``season:``)."""
+        season_id = collections.season_id_from_item_id(prov_playlist_id)
+        if season_id is not None:
+            try:
+                return await self._collection_playlist(season_id)
+            except BiliApiError as err:
+                raise self._translate_error(err) from err
+        client = self._require_client()
+        try:
+            return await catalog.get_favorite_playlist(client, self.instance_id, prov_playlist_id)
+        except BiliApiError as err:
+            if self._handle_auth_error(client, err):
+                raise MediaNotFoundError(
+                    f"Bilibili favorite playlist is unavailable: {prov_playlist_id}"
+                ) from err
+            raise self._translate_error(err) from err
+
+    async def get_playlist_tracks(
+        self, prov_playlist_id: str, page: int = 0
+    ) -> Sequence[PlaylistPlayableItem]:
+        """Return one page of a favorite folder's or a collection's tracks."""
+        season_id = collections.season_id_from_item_id(prov_playlist_id)
+        if season_id is not None:
+            try:
+                tracks = await self._collection_tracks(season_id, page)
+            except BiliApiError as err:
+                raise self._translate_error(err) from err
+            self._remember_artist_names(tracks)
+            return tracks
+        client = self._require_client()
+        now = time.monotonic()
+        cached = self._fav_tracks_cache.get(prov_playlist_id)
+        if cached is not None and cached[0] > now:
+            all_tracks = cached[1]
+        else:
+            try:
+                all_tracks = [
+                    track
+                    async for track in catalog.iter_favorite_tracks(
+                        client, self.instance_id, prov_playlist_id
+                    )
+                ]
+            except BiliApiError as err:
+                if self._handle_auth_error(client, err):
+                    return []
+                raise self._translate_error(err) from err
+            self._fav_tracks_cache[prov_playlist_id] = (
+                now + constants.FAVORITES_CACHE_TTL,
+                all_tracks,
+            )
+
+        start = max(int(page), 0) * catalog.FAV_PAGE_SIZE
+        tracks = all_tracks[start : start + catalog.FAV_PAGE_SIZE]
+        self._remember_artist_names(tracks)
+        return tracks
+
+    # ------------------------------------------------------------------
+    # recommendations / browse
+    # ------------------------------------------------------------------
+    async def get_recommendations(self) -> list[RecommendationFolder]:
+        """Return the static home-screen recommendation rows."""
+        return catalog.recommendation_rows(self.instance_id)
+
+    async def get_recommendation_items(
+        self, item_id: str
+    ) -> UniqueList[MediaItemType | ItemMapping | BrowseFolder]:
+        """Return the tracks of one recommendation row."""
+        try:
+            items = await catalog.recommendation_items(
+                self._require_client(), self.instance_id, item_id
+            )
+        except BiliApiError as err:
+            raise self._translate_error(err) from err
+        self._remember_artist_names(items)
+        return items
+
+    async def browse(self, path: str) -> Sequence[MediaItemType | ItemMapping | BrowseFolder]:
+        """Return the Bilibili browse tree."""
+        try:
+            items = await catalog.browse_items(self._require_client(), self.instance_id, path)
+        except BiliApiError as err:
+            raise self._translate_error(err) from err
+        self._remember_artist_names(items)
+        return items
+
     def _load_credential(self) -> BilibiliCredential:
         """Read the setup-flow credential, then the manual SESSDATA fallback."""
         raw = self.get_setup_value(constants.CONF_CREDENTIAL_JSON)
@@ -493,55 +767,6 @@ class BilibiliProvider(MusicProvider):
     # ------------------------------------------------------------------
     # configuration
     # ------------------------------------------------------------------
-    async def get_config_entries(self) -> tuple[ConfigEntry, ...]:
-        """Return the provider options; credentials are collected by the setup flow."""
-        return (
-            ConfigEntry(
-                key=constants.CONF_QUALITY,
-                type=ConfigEntryType.STRING,
-                default_value=constants.QUALITY_AUTO,
-                required=True,
-                options=[
-                    ConfigValueOption(quality, title=_QUALITY_TITLES.get(quality, quality))
-                    for quality in constants.QUALITY_OPTIONS
-                ],
-            ),
-            ConfigEntry(
-                key=constants.CONF_MIN_DURATION,
-                type=ConfigEntryType.INTEGER,
-                default_value=constants.DEFAULT_MIN_DURATION,
-                required=True,
-                range=(0, 36000),
-            ),
-            ConfigEntry(
-                key=constants.CONF_MAX_DURATION,
-                type=ConfigEntryType.INTEGER,
-                default_value=constants.DEFAULT_MAX_DURATION,
-                required=True,
-                range=(0, 36000),
-            ),
-            ConfigEntry(
-                key=constants.CONF_SEARCH_LIMIT,
-                type=ConfigEntryType.INTEGER,
-                default_value=constants.DEFAULT_SEARCH_LIMIT,
-                required=True,
-                range=(1, _SEARCH_PAGE_SIZE_MAX),
-            ),
-            ConfigEntry(
-                key=constants.CONF_VERIFY_STREAM_URL,
-                type=ConfigEntryType.BOOLEAN,
-                default_value=True,
-                required=True,
-            ),
-            ConfigEntry(
-                key=constants.CONF_SESSDATA_MANUAL,
-                type=ConfigEntryType.SECURE_STRING,
-                default_value="",
-                required=False,
-            ),
-            CONF_ENTRY_UNOFFICIAL_PROVIDER,
-        )
-
     def _config_int(self, key: str, default: int) -> int:
         """Read an integer option, falling back to *default* for malformed values."""
         return _as_int(self.get_config_value(key, default), default)
@@ -782,25 +1007,6 @@ class BilibiliProvider(MusicProvider):
     # ------------------------------------------------------------------
     # search / lookup
     # ------------------------------------------------------------------
-    async def search(
-        self,
-        search_query: str,
-        media_types: list[MediaType],
-        limit: int = 5,
-    ) -> SearchResults:
-        """Search Bilibili videos, collections (explicit) and tracks."""
-        query = str(search_query or "").strip()
-        if not query:
-            return SearchResults()
-        explicit = await self._search_explicit(query, media_types)
-        if explicit is not None:
-            return explicit
-        if MediaType.TRACK not in media_types:
-            return SearchResults()
-        if _VIDEO_ID_RE.fullmatch(query):
-            return await self._search_video_id(query, media_types)
-        return await self._search_keyword(query, limit)
-
     async def _search_explicit(
         self,
         query: str,
@@ -894,124 +1100,6 @@ class BilibiliProvider(MusicProvider):
         self._remember_artist_names(tracks)
         return SearchResults(tracks=tracks)
 
-    async def get_track(self, prov_track_id: str) -> Track:
-        """Return full details for a ``bvid`` / ``bvid#cid`` track id."""
-        raw = str(prov_track_id or "").strip()
-        base, cid = self._split_track_id(raw)
-        data = await self._view(base)
-
-        try:
-            track = parsers.parse_view(data, self.instance_id)
-        except ValueError as err:
-            raise MediaNotFoundError(f"Bilibili video {base} has no usable metadata") from err
-
-        if cid is not None:
-            page = self._page_for_cid(data, cid)
-            if page is not None:
-                part = str(page.get("part") or "").strip()
-                if part:
-                    # For a multi-part video the page title is the real track name.
-                    track.name = parsers.clean_title(part) or part
-                page_duration = _as_int(page.get("duration"), 0)
-                if page_duration > 0:
-                    track.duration = page_duration
-
-        # Always keep the id the caller asked for (the view payload may point at
-        # the first page of a multi-part video instead).
-        track.item_id = raw
-        for mapping in track.provider_mappings:
-            mapping.item_id = raw
-
-        self._remember_artist_names([track])
-        return track
-
-    async def get_artist(self, prov_artist_id: str) -> Artist:
-        """Return an UP owner from the names seen in search/track payloads."""
-        artist_id = str(prov_artist_id or "").strip()
-        if not artist_id:
-            raise MediaNotFoundError("Bilibili artist id is empty")
-
-        name = self._artist_names.get(artist_id) or f"Bilibili UP 主 {artist_id}"
-        url = f"https://space.bilibili.com/{artist_id}" if artist_id.isdigit() else None
-        return Artist(
-            item_id=artist_id,
-            provider=self.instance_id,
-            name=name,
-            provider_mappings={
-                ProviderMapping(
-                    item_id=artist_id,
-                    provider_domain=constants.PROVIDER_DOMAIN,
-                    provider_instance=self.instance_id,
-                    available=True,
-                    url=url,
-                )
-            },
-        )
-
-    # ------------------------------------------------------------------
-    # playback
-    # ------------------------------------------------------------------
-    async def get_stream_details(self, item_id: str, media_type: MediaType) -> StreamDetails:
-        """Resolve the best playable audio stream for a Bilibili track."""
-        if media_type != MediaType.TRACK:
-            raise MediaNotFoundError(_TRACK_MEDIA_TYPE_ERROR.format(media_type=media_type))
-
-        raw = str(item_id or "").strip()
-        base, cid = self._split_track_id(raw)
-        avid = self._avid(base)
-
-        if cid is None:
-            cid = await self._first_cid(base)
-
-        params: dict[str, Any] = {"avid": avid} if avid is not None else {"bvid": base}
-        try:
-            data = await self._require_client().playurl(**params, cid=cid)
-        except BiliApiError as err:
-            raise self._translate_error(err) from err
-
-        dash = data.get("dash") if isinstance(data, dict) else None
-        if not isinstance(dash, dict):
-            raise UnplayableMediaError(f"Bilibili did not return a DASH audio stream for {raw}")
-
-        candidates = _collect_candidates(dash)
-        if not candidates:
-            raise UnplayableMediaError(f"Bilibili returned no audio candidates for {raw}")
-
-        quality = self._config_str(constants.CONF_QUALITY, constants.QUALITY_AUTO)
-        max_rank = constants.QUALITY_MAX_RANK.get(
-            quality, constants.QUALITY_MAX_RANK[constants.QUALITY_AUTO]
-        )
-        eligible = [stream for stream in candidates if _audio_rank(stream) <= max_rank]
-        if not eligible:
-            # The user set a hard ceiling; do not silently play above it.
-            raise UnplayableMediaError(
-                f"Bilibili has no audio stream at or below quality {quality} for {raw}"
-            )
-        chosen = max(eligible, key=lambda stream: (_audio_rank(stream), stream.bandwidth))
-
-        url = chosen.url
-        if self._config_bool(constants.CONF_VERIFY_STREAM_URL, True):
-            url = await self._select_playable_url(chosen)
-
-        duration = _as_int(dash.get("duration"), 0) or None
-        return StreamDetails(
-            provider=self.instance_id,
-            item_id=raw,
-            media_type=MediaType.TRACK,
-            audio_format=_audio_format(chosen),
-            stream_type=StreamType.HTTP,
-            path=url,
-            duration=duration,
-            can_seek=True,
-            allow_seek=True,
-            expiration=_stream_expiration(url),
-            extra_input_args=list(constants.FFMPEG_HEADERS),
-            data={
-                "host": _host(url),
-                "backup_hosts": [_host(backup) for backup in chosen.backups],
-            },
-        )
-
     async def _select_playable_url(self, stream: AudioStream) -> str:
         """Probe the primary URL and its backups, falling back to the primary."""
         for url in (stream.url, *stream.backups)[:_MAX_PROBED_URLS]:
@@ -1059,101 +1147,3 @@ class BilibiliProvider(MusicProvider):
     # ------------------------------------------------------------------
     # library playlists (Bilibili favorite folders)
     # ------------------------------------------------------------------
-    async def get_library_playlists(self) -> AsyncGenerator[Playlist]:
-        """Yield the user's favorite folders; anonymous access yields nothing."""
-        client = self._client
-        if client is None or not client.credential.has_login:
-            return
-        try:
-            async for playlist in catalog.iter_favorite_playlists(client, self.instance_id):
-                yield playlist
-        except BiliApiError as err:
-            if self._handle_auth_error(client, err):
-                return
-            raise self._translate_error(err) from err
-
-    async def get_playlist(self, prov_playlist_id: str) -> Playlist:
-        """Return a favorite folder (``fav:``) or a collection (``season:``)."""
-        season_id = collections.season_id_from_item_id(prov_playlist_id)
-        if season_id is not None:
-            try:
-                return await self._collection_playlist(season_id)
-            except BiliApiError as err:
-                raise self._translate_error(err) from err
-        client = self._require_client()
-        try:
-            return await catalog.get_favorite_playlist(client, self.instance_id, prov_playlist_id)
-        except BiliApiError as err:
-            if self._handle_auth_error(client, err):
-                raise MediaNotFoundError(
-                    f"Bilibili favorite playlist is unavailable: {prov_playlist_id}"
-                ) from err
-            raise self._translate_error(err) from err
-
-    async def get_playlist_tracks(
-        self, prov_playlist_id: str, page: int = 0
-    ) -> Sequence[PlaylistPlayableItem]:
-        """Return one page of a favorite folder's or a collection's tracks."""
-        season_id = collections.season_id_from_item_id(prov_playlist_id)
-        if season_id is not None:
-            try:
-                tracks = await self._collection_tracks(season_id, page)
-            except BiliApiError as err:
-                raise self._translate_error(err) from err
-            self._remember_artist_names(tracks)
-            return tracks
-        client = self._require_client()
-        now = time.monotonic()
-        cached = self._fav_tracks_cache.get(prov_playlist_id)
-        if cached is not None and cached[0] > now:
-            all_tracks = cached[1]
-        else:
-            try:
-                all_tracks = [
-                    track
-                    async for track in catalog.iter_favorite_tracks(
-                        client, self.instance_id, prov_playlist_id
-                    )
-                ]
-            except BiliApiError as err:
-                if self._handle_auth_error(client, err):
-                    return []
-                raise self._translate_error(err) from err
-            self._fav_tracks_cache[prov_playlist_id] = (
-                now + constants.FAVORITES_CACHE_TTL,
-                all_tracks,
-            )
-
-        start = max(int(page), 0) * catalog.FAV_PAGE_SIZE
-        tracks = all_tracks[start : start + catalog.FAV_PAGE_SIZE]
-        self._remember_artist_names(tracks)
-        return tracks
-
-    # ------------------------------------------------------------------
-    # recommendations / browse
-    # ------------------------------------------------------------------
-    async def get_recommendations(self) -> list[RecommendationFolder]:
-        """Return the static home-screen recommendation rows."""
-        return catalog.recommendation_rows(self.instance_id)
-
-    async def get_recommendation_items(
-        self, item_id: str
-    ) -> UniqueList[MediaItemType | ItemMapping | BrowseFolder]:
-        """Return the tracks of one recommendation row."""
-        try:
-            items = await catalog.recommendation_items(
-                self._require_client(), self.instance_id, item_id
-            )
-        except BiliApiError as err:
-            raise self._translate_error(err) from err
-        self._remember_artist_names(items)
-        return items
-
-    async def browse(self, path: str) -> Sequence[MediaItemType | ItemMapping | BrowseFolder]:
-        """Return the Bilibili browse tree."""
-        try:
-            items = await catalog.browse_items(self._require_client(), self.instance_id, path)
-        except BiliApiError as err:
-            raise self._translate_error(err) from err
-        self._remember_artist_names(items)
-        return items

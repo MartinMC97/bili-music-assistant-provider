@@ -138,6 +138,7 @@ docker exec -w /workspace bilibili-ma-dev /app/venv/bin/ruff check provider test
 docker exec -w /workspace bilibili-ma-dev /app/venv/bin/ruff format --check provider tests
 docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python -m mypy
 docker exec -w /workspace bilibili-ma-dev /app/venv/bin/codespell provider tests scripts docs README.md
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/check_provider_conventions.py
 docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python -m pytest -q
 
 # 4. 真实播放 E2E（会访问 B 站 API/CDN）

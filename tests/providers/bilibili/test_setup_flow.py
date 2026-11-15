@@ -307,8 +307,9 @@ async def test_missing_segno_falls_back_to_manual_form(monkeypatch: pytest.Monke
 
     assert [step_id for step_id, _ in session.forms] == ["choose", "manual"]
     sessdata_entry = session.forms[1][1][0]
-    assert setup_flow.SEGNO_REQUIREMENT in (sessdata_entry.description or "")
-    assert "install" in (sessdata_entry.description or "").lower()
+    # The install hint is localized from strings.json; the entry carries the key/params.
+    assert sessdata_entry.translation_key == setup_flow.CONF_SESSDATA_QR_UNAVAILABLE
+    assert setup_flow.SEGNO_REQUIREMENT in (sessdata_entry.translation_params or [])
     assert session.progress == []
     assert client.generate_calls == 0
     assert stored_credential(session).sessdata == FAKE_SESSDATA

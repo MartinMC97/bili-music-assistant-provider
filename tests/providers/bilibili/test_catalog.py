@@ -302,9 +302,13 @@ def test_recommendation_rows() -> None:
     assert all(row.provider == PROVIDER for row in rows)
     assert all(row.name for row in rows)
     assert all(row.icon for row in rows)
-    assert rows[0].name == "音乐综合榜"
-    assert rows[1].name == "新歌"
-    assert rows[2].name == "分区榜"
+    # English fallbacks, localized via media.recommendations.<key>.name.
+    assert [row.translation_key for row in rows] == [
+        "rank_music",
+        "new_music",
+        "region_music",
+    ]
+    assert [row.name for row in rows] == ["Music chart", "New releases", "Regional chart"]
 
 
 async def test_recommendation_items_rank_music() -> None:
@@ -389,7 +393,9 @@ async def test_browse_root_returns_three_folders() -> None:
             f"{PROVIDER}://new",
             f"{PROVIDER}://favorites",
         ]
-        assert [item.name for item in items] == ["排行榜", "新歌", "收藏夹"]
+        # English fallbacks, localized via media.folder.<key>.name.
+        assert [item.translation_key for item in folders] == ["rank", "new", "favorites"]
+        assert [item.name for item in items] == ["Charts", "New releases", "Favorites"]
         assert all(item.provider == PROVIDER for item in items)
         assert client.calls == []
 
