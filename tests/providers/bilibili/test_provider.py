@@ -29,6 +29,8 @@ from bilibili import BilibiliProvider, constants, setup
 from bilibili.auth import BilibiliCredential
 from bilibili.client import BiliApiError, BilibiliClient
 
+from .fakes import FakeMassBase
+
 PROVIDER = "bilibili_test"
 MANIFEST = SimpleNamespace(
     type=ProviderType.MUSIC,
@@ -71,7 +73,7 @@ class FakeMassConfig:
         return self.raw_values.get(key)
 
 
-class FakeMass:
+class FakeMass(FakeMassBase):
     """Minimal ``MusicAssistant`` stand-in: cache, config and shared HTTP session."""
 
     def __init__(
@@ -81,7 +83,7 @@ class FakeMass:
         raw_values: dict[str, Any] | None = None,
     ) -> None:
         """Store the HTTP session and config stand-ins."""
-        self.cache = None
+        super().__init__()
         self.http_session = http_session or RecordingHTTPSession()
         self.config = FakeMassConfig(setup_data, raw_values)
 
@@ -127,17 +129,20 @@ class FakeClient:
         search_items: list[dict[str, Any]] | None = None,
         view_data: dict[str, Any] | None = None,
         playurl_data: dict[str, Any] | None = None,
+        fav_data: dict[str, Any] | None = None,
     ) -> None:
         """Store the canned payloads and call log."""
         self.credential = credential or BilibiliCredential()
         self.search_items = list(search_items or [])
         self.view_data = view_data or {}
         self.playurl_data = playurl_data or {}
+        self.fav_data = fav_data or {"medias": [], "has_more": False}
         self.search_error: Exception | None = None
         self.view_error: Exception | None = None
         self.playurl_error: Exception | None = None
         self.calls: list[tuple[Any, ...]] = []
         self.view_calls = 0
+        self.fav_calls = 0
 
     async def search_video(
         self, keyword: str, page: int = 1, page_size: int = 20
@@ -170,6 +175,12 @@ class FakeClient:
         self.calls.append(("fav_folders", mid))
         raise AssertionError("favorite folders must not be requested anonymously")
 
+    async def fav_items(self, media_id: int, page: int = 1, page_size: int = 20) -> dict[str, Any]:
+        """Return the canned favorite-folder page and record the call."""
+        self.calls.append(("fav_items", media_id, page, page_size))
+        self.fav_calls += 1
+        return copy.deepcopy(self.fav_data)
+
     async def close(self) -> None:
         """Nothing to close: the HTTP session is shared."""
         self.calls.append(("close",))
@@ -177,6 +188,7 @@ class FakeClient:
 
 if TYPE_CHECKING:
     from music_assistant.mass import MusicAssistant
+    from music_assistant_models.media_items import Track
     from music_assistant_models.provider import ProviderManifest
 
 
@@ -645,6 +657,22 @@ async def test_get_track_uses_page_part_and_caches_view() -> None:
     assert client.view_calls == 1
 
 
+async def test_view_lookup_is_retried_after_a_failure() -> None:
+    """A failed view lookup is not cached, so the next call hits the API again."""
+    client = FakeClient(view_data=multi_part_view())
+    client.view_error = BiliApiError(-352, "rate limited", "/view")
+    provider, _ = await make_provider(client=client)
+
+    with pytest.raises(ResourceTemporarilyUnavailable):
+        await provider.get_track("BV1multi")
+
+    client.view_error = None
+    track = await provider.get_track("BV1multi")
+
+    assert track.item_id == "BV1multi"
+    assert client.view_calls == 2
+
+
 async def test_get_track_rejects_empty_id() -> None:
     """An empty provider track id is a not-found error."""
     provider, _ = await make_provider(client=FakeClient())
@@ -887,8 +915,36 @@ async def test_anonymous_library_playlists_are_empty() -> None:
     assert client.calls == []
 
 
-async def test_unload_drops_client_and_caches() -> None:
-    """Unload closes the client and clears the in-memory caches."""
+async def test_favorite_folder_listing_is_cached() -> None:
+    """Reading a favorite folder twice reuses the cached track objects."""
+    client = FakeClient(
+        fav_data={
+            "medias": [
+                {
+                    "bvid": "BV1fav",
+                    "title": "收藏的歌",
+                    "duration": 200,
+                    "attr": 0,
+                    "upper": {"mid": 7, "name": "收藏 UP"},
+                }
+            ],
+            "has_more": False,
+        }
+    )
+    provider, _ = await make_provider(client=client)
+
+    first = await provider.get_playlist_tracks("fav:42", 0)
+    second = await provider.get_playlist_tracks("fav:42", 0)
+
+    # The cache round-trips the Track through JSON, so a hit must rebuild it.
+    assert [track.item_id for track in first] == ["BV1fav"]
+    assert [track.item_id for track in second] == ["BV1fav"]
+    assert cast("Track", second[0]).artists[0].name == "收藏 UP"
+    assert client.fav_calls == 1
+
+
+async def test_unload_drops_client_and_memory() -> None:
+    """Unload closes the client and clears the session-scoped state."""
     client = FakeClient()
     provider, _ = await make_provider(client=client)
 

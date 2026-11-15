@@ -28,6 +28,8 @@ from bilibili import BilibiliProvider, constants
 from bilibili.auth import BilibiliCredential
 from bilibili.client import BilibiliClient
 
+from .fakes import FakeMassBase
+
 PROVIDER = "bilibili_stream_selection"
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 MANIFEST = SimpleNamespace(
@@ -111,12 +113,12 @@ class FakeMassConfig:
         return self.raw_values.get(key)
 
 
-class FakeMass:
+class FakeMass(FakeMassBase):
     """Minimal ``MusicAssistant`` stand-in (config plus an HTTP session)."""
 
     def __init__(self, raw_values: dict[str, Any] | None = None) -> None:
         """Build the stand-in with all network access disabled."""
-        self.cache = None
+        super().__init__()
         self.http_session = NoNetworkSession()
         self.config = FakeMassConfig(raw_values)
 
