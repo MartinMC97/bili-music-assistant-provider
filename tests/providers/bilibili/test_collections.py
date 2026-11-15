@@ -1,4 +1,5 @@
-"""Unit tests for Bilibili UP collections (合集) as Music Assistant playlists.
+"""
+Unit tests for Bilibili UP collections (合集) as Music Assistant playlists.
 
 Fully offline: a fake client serves the recorded ``tests/fixtures`` payloads.
 """
@@ -9,11 +10,9 @@ import copy
 import json
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
-from bilibili import BilibiliProvider, collections, constants, parsers
-from bilibili.auth import BilibiliCredential
 from music_assistant_models.config_entries import ProviderConfig
 from music_assistant_models.enums import (
     MediaType,
@@ -23,8 +22,12 @@ from music_assistant_models.enums import (
 )
 from music_assistant_models.errors import MediaNotFoundError
 
+from bilibili import BilibiliProvider, collections, constants, parsers
+from bilibili.auth import BilibiliCredential
+from bilibili.client import BilibiliClient
+
 PROVIDER = "bilibili_collections_test"
-FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 MANIFEST = SimpleNamespace(
     type=ProviderType.MUSIC,
     domain="bilibili",
@@ -45,12 +48,12 @@ def load_fixture(name: str) -> dict[str, Any]:
 
 def season_data() -> dict[str, Any]:
     """Return the recorded season archives ``data`` object."""
-    return load_fixture("season_archives")["data"]
+    return cast("dict[str, Any]", load_fixture("season_archives")["data"])
 
 
 def up_collections_data() -> dict[str, Any]:
     """Return the recorded UP collections ``data`` object."""
-    return load_fixture("space_collections")["data"]
+    return cast("dict[str, Any]", load_fixture("space_collections")["data"])
 
 
 def view_with_collection() -> dict[str, Any]:
@@ -58,7 +61,7 @@ def view_with_collection() -> dict[str, Any]:
     return {
         "bvid": "BV15aWu61Emu",
         "aid": 115123679206788,
-        "title": "45分钟抖音热歌音乐合集（纯享版）",
+        "title": "45分钟抖音热歌音乐合集（纯享版）",  # noqa: RUF001 - Chinese test data
         "pic": "https://i0.hdslb.com/bfs/archive/fixture-view.jpg",
         "pubdate": 1794740400,
         "duration": 2650,
@@ -67,7 +70,7 @@ def view_with_collection() -> dict[str, Any]:
         "stat": {"view": 12345},
         "ugc_season": {
             "id": 6362662,
-            "title": "45分钟音乐合集（听完下课）",
+            "title": "45分钟音乐合集（听完下课）",  # noqa: RUF001 - Chinese test data
             "cover": "https://archive.biliimg.com/bfs/archive/fixture-view-season.jpg",
             "mid": 1696279451,
             "intro": "合集简介",
@@ -127,13 +130,13 @@ class FakeClient:
                 "meta": {
                     "season_id": 6362662,
                     "mid": 1696279451,
-                    "title": "45分钟音乐合集（听完下课）",
+                    "title": "45分钟音乐合集（听完下课）",  # noqa: RUF001 - Chinese test data
                     "cover": "https://archive.biliimg.com/bfs/archive/fixture-view-season.jpg",
                     "total": 1,
                 },
                 "page": {"page_num": 1, "page_size": 100, "total": 1},
                 "archives": [],
-            }
+            },
         }
         self.collections_payload = up_collections_data()
         self.card_names: dict[int, str] = {
@@ -141,7 +144,9 @@ class FakeClient:
             1696279451: "Bobaya6",
         }
 
-    async def search_video(self, keyword: str, page: int = 1, page_size: int = 20) -> list:
+    async def search_video(
+        self, keyword: str, page: int = 1, page_size: int = 20
+    ) -> list[dict[str, Any]]:
         """Record the call and return canned music results."""
         self.calls.append(("search_video", keyword, page, page_size))
         return list(self.search_items)
@@ -185,6 +190,12 @@ class FakeClient:
         return {"card": {"mid": mid, "name": name}}
 
 
+if TYPE_CHECKING:
+    from music_assistant.mass import MusicAssistant
+    from music_assistant_models.media_items import Playlist, Track
+    from music_assistant_models.provider import ProviderManifest
+
+
 async def make_provider(client: FakeClient) -> BilibiliProvider:
     """Build a provider with an injected fake client."""
     config = ProviderConfig(
@@ -194,14 +205,14 @@ async def make_provider(client: FakeClient) -> BilibiliProvider:
         values={},
     )
     provider = BilibiliProvider(
-        FakeMass(),
-        MANIFEST,
+        cast("MusicAssistant", FakeMass()),
+        cast("ProviderManifest", MANIFEST),
         config,
         {ProviderFeature.SEARCH, ProviderFeature.LIBRARY_PLAYLISTS},
     )
     for entry in await provider.get_config_entries():
         config.values[entry.key] = copy.deepcopy(entry)
-    provider._client = client
+    provider._client = cast("BilibiliClient", client)
     return provider
 
 
@@ -217,7 +228,10 @@ async def make_provider(client: FakeClient) -> BilibiliProvider:
         ("https://space.bilibili.com/3546851714271831/lists/7817533?type=season", "7817533"),
         # the form Music Assistant passes to providers (it replaces "/" with " ")
         ("https:  space.bilibili.com 3546851714271831 lists 7817533?type=season", "7817533"),
-        ("https://space.bilibili.com/3546851714271831/channel/collectiondetail?sid=7817533", "7817533"),
+        (
+            "https://space.bilibili.com/3546851714271831/channel/collectiondetail?sid=7817533",
+            "7817533",
+        ),
         # series URLs are not supported and must not become a collection
         ("https://space.bilibili.com/3546851714271831/lists/7817533?type=series", None),
         # a bare number is never a collection id
@@ -277,7 +291,7 @@ def test_parse_collection() -> None:
     assert playlist is not None
     assert playlist.item_id == "season:7817533"
     assert playlist.provider == PROVIDER
-    assert playlist.name == "「Chill Lofi Music」Lofi Rainy Night.🌧️雨夜备忘录（2016）"
+    assert playlist.name == "「Chill Lofi Music」Lofi Rainy Night.🌧️雨夜备忘录（2016）"  # noqa: RUF001
     assert playlist.owner == "LofiRainyNight"
     assert playlist.is_editable is False
     assert playlist.metadata.images
@@ -295,16 +309,15 @@ def test_parse_collection_rejects_payload_without_season_id() -> None:
 def test_parse_collection_archive() -> None:
     """An archive entry becomes a Track with position-ready fields."""
     archive = season_data()["archives"][0]
-    track = parsers.parse_collection_archive(
-        archive, PROVIDER, "LofiRainyNight", 3546851714271831
-    )
+    track = parsers.parse_collection_archive(archive, PROVIDER, "LofiRainyNight", 3546851714271831)
 
     assert track is not None
     assert track.item_id == "BV1uVa5zXEyH"
     assert track.duration == 2650
     # Editorial collection titles keep their decoration instead of being cleaned.
     assert "Lofi" in track.name
-    assert track.artists and track.artists[0].name == "LofiRainyNight"
+    assert track.artists
+    assert track.artists[0].name == "LofiRainyNight"
     assert track.artists[0].item_id == "3546851714271831"
 
 
@@ -333,7 +346,7 @@ async def test_search_bseason_returns_playlist_with_owner() -> None:
 
     assert results.tracks == []
     assert [item.item_id for item in results.playlists] == ["season:7817533"]
-    assert results.playlists[0].owner == "LofiRainyNight"
+    assert cast("Playlist", results.playlists[0]).owner == "LofiRainyNight"
 
 
 async def test_search_collection_url() -> None:
@@ -379,7 +392,7 @@ async def test_search_up_lists_collections() -> None:
         "season:7817533",
         "season:6929179",
     ]
-    assert all(item.owner == "LofiRainyNight" for item in results.playlists)
+    assert all(cast("Playlist", item).owner == "LofiRainyNight" for item in results.playlists)
 
 
 async def test_search_bv_includes_its_collection() -> None:
@@ -424,7 +437,7 @@ async def test_get_playlist_tracks_pages_the_collection() -> None:
 
     assert [track.item_id for track in tracks] == ["BV1uVa5zXEyH", "BV1pwa3zYENm", "BV1bZaUzSEom"]
     assert [track.position for track in tracks] == [1, 2, 3]
-    assert tracks[0].artists[0].name == "LofiRainyNight"
+    assert cast("Track", tracks[0]).artists[0].name == "LofiRainyNight"
     # one page of 100 items is requested
     season_calls = [call for call in client.calls if call[0] == "season_archives"]
     assert season_calls[-1][3] == constants.COLLECTION_PAGE_SIZE

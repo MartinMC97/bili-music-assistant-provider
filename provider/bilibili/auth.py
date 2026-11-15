@@ -78,11 +78,12 @@ class BilibiliCredential:
         if not raw:
             return cls()
         try:
-            data: dict[str, Any] = json.loads(raw)
+            parsed: Any = json.loads(raw)
         except TypeError, ValueError:
             return cls()
-        if not isinstance(data, dict):
+        if not isinstance(parsed, dict):
             return cls()
+        data: dict[str, Any] = parsed
         try:
             saved_at = int(data.get("saved_at") or 0)
         except TypeError, ValueError:
@@ -114,7 +115,7 @@ class BilibiliCredential:
 
     def merged(self, other: BilibiliCredential) -> BilibiliCredential:
         """Return a copy where non-empty fields of *other* win."""
-        values: dict[str, str] = {}
+        values: dict[str, Any] = {}
         for field_name in ("sessdata", "bili_jct", "dedeuserid", "buvid3", "buvid4"):
             values[field_name] = getattr(other, field_name) or getattr(self, field_name)
         values["saved_at"] = int(time.time())

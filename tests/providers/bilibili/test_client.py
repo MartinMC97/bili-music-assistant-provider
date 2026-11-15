@@ -4,25 +4,26 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Self, cast
 from urllib.parse import parse_qs, urlsplit
 
 import aiohttp
 import pytest
+from music_assistant_models.errors import ResourceTemporarilyUnavailable
+
 from bilibili import constants
 from bilibili.auth import BilibiliCredential
 from bilibili.client import AudioStream, BiliApiError, BilibiliClient
 from bilibili.wbi import sign_params
-from music_assistant_models.errors import ResourceTemporarilyUnavailable
 
-FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 IMG_KEY = "7cd084941338484aae1ad9425b84077c"
 SUB_KEY = "4932caff0ff746eab6f01bf08b70ac45"
 
 
 def load_fixture(name: str) -> dict[str, Any]:
     """Load a recorded API response."""
-    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+    return cast("dict[str, Any]", json.loads((FIXTURES / name).read_text(encoding="utf-8")))
 
 
 def nav_payload(code: int = 0) -> dict[str, Any]:
@@ -50,18 +51,22 @@ class FakeResponse:
         status: int = 200,
         cookies: dict[str, str] | None = None,
     ) -> None:
+        """Store the canned payload, status and cookies."""
         self.payload = payload
         self.status = status
         self.cookies = cookies or {}
         self.headers: dict[str, str] = {}
 
-    async def __aenter__(self) -> FakeResponse:
+    async def __aenter__(self) -> Self:
+        """Enter the context manager."""
         return self
 
     async def __aexit__(self, *exc_info: object) -> bool:
+        """Leave the context manager without suppressing exceptions."""
         return False
 
     async def json(self, *args: object, **kwargs: object) -> Any:
+        """Return the canned JSON payload."""
         return self.payload
 
 
@@ -69,13 +74,16 @@ class FakeSession:
     """Queue-backed stand-in for ``mass.http_session``."""
 
     def __init__(self, responses: list[FakeResponse | Exception] | None = None) -> None:
+        """Queue up the canned responses."""
         self.responses = list(responses or [])
         self.requests: list[tuple[str, dict[str, Any]]] = []
 
     def queue(self, response: FakeResponse | Exception) -> None:
+        """Append one response (or exception) to the queue."""
         self.responses.append(response)
 
     def get(self, url: object, **kwargs: Any) -> FakeResponse:
+        """Record the request and return the next queued response."""
         self.requests.append((str(url), kwargs))
         if not self.responses:
             raise AssertionError(f"unexpected request: {url}")
@@ -85,6 +93,7 @@ class FakeSession:
         return response
 
     def urls(self) -> list[str]:
+        """Return the requested URLs in call order."""
         return [url for url, _ in self.requests]
 
 
@@ -92,6 +101,7 @@ class FakeMass:
     """Stand-in for the MusicAssistant instance (only ``http_session`` is used)."""
 
     def __init__(self, responses: list[FakeResponse | Exception] | None = None) -> None:
+        """Build the stand-in with an HTTP session holding the canned responses."""
         self.http_session = FakeSession(responses)
 
 
@@ -99,6 +109,7 @@ def make_client(
     responses: list[FakeResponse | Exception],
     credential: BilibiliCredential | None = None,
 ) -> tuple[BilibiliClient, FakeMass]:
+    """Build a client wired to a fake session and return both."""
     mass = FakeMass(responses)
     return BilibiliClient(mass, credential or BilibiliCredential()), mass
 
@@ -199,7 +210,7 @@ async def test_api_error_carries_code_message_and_endpoint() -> None:
 
 
 async def test_view_and_playurl() -> None:
-    """view returns data and playurl sends the DASH parameters."""
+    """View returns data and playurl sends the DASH parameters."""
     client, mass = make_client(
         [FakeResponse(load_fixture("view.json")), FakeResponse(load_fixture("playurl.json"))]
     )
@@ -319,7 +330,7 @@ async def test_http_500_becomes_temporarily_unavailable() -> None:
 
 
 async def test_spi_returns_device_cookies() -> None:
-    """spi normalises the b_3/b_4 payload."""
+    """Spi normalises the b_3/b_4 payload."""
     client, mass = make_client(
         [FakeResponse({"code": 0, "data": {"b_3": "buvid3-value", "b_4": "buvid4-value"}})]
     )
@@ -346,9 +357,12 @@ async def test_ranking_region_and_music_sources() -> None:
     new = await client.new_music()
     recommended = await client.rcmd()
 
-    assert region and region[0]["bvid"] == "BV17VZpY1ENA"
-    assert music and "music_title" in music[0]
-    assert new and "music_title" in new[0]
+    assert region
+    assert region[0]["bvid"] == "BV17VZpY1ENA"
+    assert music
+    assert "music_title" in music[0]
+    assert new
+    assert "music_title" in new[0]
     assert recommended == [{"bvid": "BV1"}]
     urls = mass.http_session.urls()
     assert parse_qs(urlsplit(urls[0]).query) == {"rid": ["3"], "day": ["3"]}
@@ -370,7 +384,8 @@ async def test_favorite_endpoints() -> None:
     collected = await client.fav_collected(42, page=2, page_size=10)
     items = await client.fav_items(123456, page=3, page_size=20)
 
-    assert folders and folders[0]["id"] == 123456
+    assert folders
+    assert folders[0]["id"] == 123456
     assert collected["has_more"] is False
     assert items["medias"]
     urls = mass.http_session.urls()
@@ -392,7 +407,7 @@ async def test_close_is_a_noop() -> None:
     """The shared MA session must not be closed by the provider."""
     client, _ = make_client([])
 
-    assert await client.close() is None
+    await client.close()
 
 
 def test_audio_stream_defaults() -> None:

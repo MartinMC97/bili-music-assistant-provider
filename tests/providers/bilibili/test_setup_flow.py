@@ -7,15 +7,16 @@ import base64
 import builtins
 import logging
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 import aiohttp
 import pytest
+from music_assistant.models.setup_flow import SetupFlowError, SetupSession, StepExpiredError
+from music_assistant_models.enums import ConfigEntryType
+
 from bilibili import setup_flow
 from bilibili.auth import BilibiliCredential
 from bilibili.client import BiliApiError
-from music_assistant.models.setup_flow import SetupFlowError, StepExpiredError
-from music_assistant_models.enums import ConfigEntryType
 
 FAKE_SESSDATA = "fake-sessdata-value"
 FAKE_JCT = "fake-bili-jct"
@@ -27,6 +28,7 @@ class FakeSession:
     """Minimal stand-in for ``SetupSession`` recording every interaction."""
 
     def __init__(self, forms: list[dict[str, Any]], *, deadline: float | None = None) -> None:
+        """Store the canned form answers and the per-step deadline."""
         self.mass = SimpleNamespace(http_session=None)
         self.logger = logging.getLogger("test.setup_flow")
         self._forms = list(forms)
@@ -41,6 +43,7 @@ class FakeSession:
         step_id: str = "user",
         **kwargs: Any,
     ) -> dict[str, Any]:
+        """Record the requested form and return the next canned answer."""
         self.forms.append((step_id, list(entries)))
         return self._forms.pop(0)
 
@@ -52,6 +55,7 @@ class FakeSession:
         image: str | None = None,
         expires_in: float | None = None,
     ) -> Any:
+        """Record the progress step and await the wrapped work."""
         self.progress.append(
             {"step_id": step_id, "text": text, "image": image, "expires_in": expires_in}
         )
@@ -64,6 +68,7 @@ class FakeSession:
             raise StepExpiredError from err
 
     async def finish(self, values: dict[str, Any]) -> dict[str, str]:
+        """Record the finished setup values."""
         self.finished.append(values)
         return {}
 
@@ -81,6 +86,7 @@ class FakeClient:
         poll_error: Exception | None = None,
         spi_error: Exception | None = None,
     ) -> None:
+        """Store the canned QR/poll payloads and error injections."""
         self.qr = qr if qr is not None else {"url": FAKE_QR_URL, "qrcode_key": "fake-key"}
         self.polls = list(polls or [])
         self.spi_result = spi if spi is not None else {"b_3": "fake-buvid3", "b_4": "fake-buvid4"}
@@ -94,12 +100,14 @@ class FakeClient:
         self.closed = False
 
     async def qrcode_generate(self) -> dict[str, str]:
+        """Return the canned QR payload."""
         self.generate_calls += 1
         if self.generate_error is not None:
             raise self.generate_error
         return self.qr
 
     async def qrcode_poll(self, qrcode_key: str) -> tuple[int, dict[str, str]]:
+        """Return the next canned poll result."""
         self.poll_calls += 1
         if self.poll_error is not None:
             raise self.poll_error
@@ -107,12 +115,14 @@ class FakeClient:
         return self.polls.pop(0)
 
     async def spi(self) -> dict[str, str]:
+        """Return the canned buvid fingerprint."""
         self.spi_calls += 1
         if self.spi_error is not None:
             raise self.spi_error
         return self.spi_result
 
     async def close(self) -> None:
+        """Mark the fake client as closed."""
         self.closed = True
 
 
@@ -150,7 +160,7 @@ async def test_anonymous_clears_credential(monkeypatch: pytest.MonkeyPatch) -> N
     session = FakeSession([{setup_flow.CONF_METHOD: "anonymous"}])
     client = install_client(monkeypatch, FakeClient())
 
-    await setup_flow.run_setup(session)
+    await setup_flow.run_setup(cast("SetupSession", session))
 
     step_id, entries = session.forms[0]
     assert step_id == "choose"
@@ -175,7 +185,7 @@ async def test_manual_form_builds_credential_json(monkeypatch: pytest.MonkeyPatc
     )
     install_client(monkeypatch, FakeClient())
 
-    await setup_flow.run_setup(session)
+    await setup_flow.run_setup(cast("SetupSession", session))
 
     assert [step_id for step_id, _ in session.forms] == ["choose", "manual"]
     sessdata_entry, dedeuserid_entry = session.forms[1][1]
@@ -197,7 +207,7 @@ async def test_manual_rejects_empty_sessdata(monkeypatch: pytest.MonkeyPatch) ->
     install_client(monkeypatch, FakeClient())
 
     with pytest.raises(SetupFlowError):
-        await setup_flow.run_setup(session)
+        await setup_flow.run_setup(cast("SetupSession", session))
     assert session.finished == []
 
 
@@ -220,7 +230,7 @@ async def test_qr_success_stores_cookies_and_buvid(monkeypatch: pytest.MonkeyPat
         ),
     )
 
-    await setup_flow.run_setup(session)
+    await setup_flow.run_setup(cast("SetupSession", session))
 
     # the QR client is created without any credential (anonymous fingerprint request)
     assert client.init_kwargs["credential"].has_login is False
@@ -256,7 +266,7 @@ async def test_qr_expired_raises_step_expired(monkeypatch: pytest.MonkeyPatch) -
     )
 
     with pytest.raises(StepExpiredError):
-        await setup_flow.run_setup(session)
+        await setup_flow.run_setup(cast("SetupSession", session))
 
     assert session.finished == []
     assert client.closed is True
@@ -276,7 +286,7 @@ async def test_qr_timeout_raises_step_expired(monkeypatch: pytest.MonkeyPatch) -
     )
 
     with pytest.raises(StepExpiredError):
-        await setup_flow.run_setup(session)
+        await setup_flow.run_setup(cast("SetupSession", session))
 
     assert session.finished == []
     assert client.closed is True
@@ -293,7 +303,7 @@ async def test_missing_segno_falls_back_to_manual_form(monkeypatch: pytest.Monke
     )
     client = install_client(monkeypatch, FakeClient())
 
-    await setup_flow.run_setup(session)
+    await setup_flow.run_setup(cast("SetupSession", session))
 
     assert [step_id for step_id, _ in session.forms] == ["choose", "manual"]
     sessdata_entry = session.forms[1][1][0]
@@ -332,7 +342,7 @@ async def test_qr_api_error_becomes_setup_flow_error(
     )
 
     with pytest.raises(SetupFlowError):
-        await setup_flow.run_setup(session)
+        await setup_flow.run_setup(cast("SetupSession", session))
 
     assert session.finished == []
     assert client.closed is True
@@ -350,7 +360,7 @@ async def test_qr_network_error_becomes_setup_flow_error(
     )
 
     with pytest.raises(SetupFlowError):
-        await setup_flow.run_setup(session)
+        await setup_flow.run_setup(cast("SetupSession", session))
 
     assert session.finished == []
     assert client.closed is True
@@ -373,7 +383,7 @@ async def test_qr_login_survives_spi_failure(monkeypatch: pytest.MonkeyPatch) ->
         ),
     )
 
-    await setup_flow.run_setup(session)
+    await setup_flow.run_setup(cast("SetupSession", session))
 
     credential = stored_credential(session)
     assert credential.has_login is True

@@ -133,9 +133,12 @@ docker compose -f docker/compose.dev.yml up -d
 # 2. 改代码后重启并看日志
 ./scripts/dev.sh
 
-# 3. 跑单测 / lint（容器内有 Python 3.14 + MA 模型）
-docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python -m pytest -q
+# 3. 跑与官方仓库一致的检查（ruff 0.15.22 / mypy strict / codespell / pytest）
 docker exec -w /workspace bilibili-ma-dev /app/venv/bin/ruff check provider tests
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/ruff format --check provider tests
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python -m mypy
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/codespell provider tests scripts docs README.md
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python -m pytest -q
 
 # 4. 真实播放 E2E（会访问 B 站 API/CDN）
 docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_stream.py

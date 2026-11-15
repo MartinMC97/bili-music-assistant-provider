@@ -18,14 +18,17 @@ jobs:
   tests:
     name: tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Pytest and Ruff (MA 2.10.8)
+      # Mirrors the checks music-assistant/server runs on a provider: ruff (select ALL +
+      # ruff format), mypy in strict mode, codespell and pytest. The tool versions are
+      # pinned to the ones used by music-assistant/server 2.10.11 so results match upstream.
+      - name: Lint and test (MA 2.10.11)
         shell: bash
         run: |
           docker run --rm \
@@ -33,5 +36,13 @@ jobs:
             -w /workspace \
             -e PYTHONDONTWRITEBYTECODE=1 \
             --entrypoint sh \
-            ghcr.io/music-assistant/server:2.10.8 \
-            -c "/app/venv/bin/uv pip install -q --python /app/venv/bin/python pytest pytest-asyncio ruff segno==1.6.6 && /app/venv/bin/python -m pytest -q && /app/venv/bin/ruff check provider tests"
+            ghcr.io/music-assistant/server:2.10.11 \
+            -c "set -eu
+              /app/venv/bin/uv pip install -q --python /app/venv/bin/python \
+                ruff==0.15.22 mypy==2.3.0 codespell==2.4.3 \
+                pytest pytest-asyncio pytest-timeout segno==1.6.6
+              /app/venv/bin/ruff check provider tests
+              /app/venv/bin/ruff format --check provider tests
+              /app/venv/bin/python -m mypy
+              /app/venv/bin/codespell provider tests scripts docs README.md
+              /app/venv/bin/python -m pytest -q"

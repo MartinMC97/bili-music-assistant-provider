@@ -1,4 +1,5 @@
-"""Interactive setup flow for the Bilibili music provider.
+"""
+Interactive setup flow for the Bilibili music provider.
 
 The flow is one plain coroutine authored against
 :class:`music_assistant.models.setup_flow.SetupSession`. It asks for a login
@@ -88,7 +89,7 @@ def _segno_install_hint() -> str:
 def _import_segno() -> ModuleType | None:
     """Import the optional ``segno`` package, returning None when it is missing."""
     try:
-        import segno
+        import segno  # noqa: PLC0415 - optional dependency, imported lazily
     except ImportError:
         return None
     return segno

@@ -1,7 +1,7 @@
 # Build a Music Assistant image with the Bilibili provider baked in.
-# Usage: docker build -f docker/Dockerfile -t music-assistant:2.10.8-bili .
+# Usage: docker build -f docker/Dockerfile -t music-assistant:2.10.11-bili .
 # Override the base MA version with --build-arg MA_VERSION=x.y.z
-ARG MA_VERSION=2.10.8
+ARG MA_VERSION=2.10.11
 FROM ghcr.io/music-assistant/server:${MA_VERSION}
 
 # The MA package lives in the venv's site-packages, which depends on the Python
@@ -12,4 +12,6 @@ RUN PROVIDERS="$(/app/venv/bin/python -c \
     && mkdir -p "$PROVIDERS" \
     && cp -r /tmp/bilibili "$PROVIDERS/bilibili" \
     && rm -rf /tmp/bilibili \
+    # The provider pins segno in manifest.json requirements (upstream convention).
+    # Bake it in here so the image works without network access at first start.
     && /app/venv/bin/uv pip install --no-cache segno==1.6.6

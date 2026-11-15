@@ -1,4 +1,5 @@
-"""Bilibili music provider for Music Assistant.
+"""
+Bilibili music provider for Music Assistant.
 
 The provider streams the audio track of Bilibili videos. It is deliberately
 read-only: the only account state it touches is the favorite folders and the
@@ -72,9 +73,9 @@ SUPPORTED_FEATURES = {
 _VIDEO_ID_RE: Final = re.compile(r"(?:BV[0-9A-Za-z]{10}|av\d+)", re.IGNORECASE)
 
 _QUALITY_TITLES: Final = {
-    constants.QUALITY_AUTO: "自动（最高可用）",
-    constants.QUALITY_FLAC: "FLAC 无损",
-    constants.QUALITY_DOLBY: "Dolby 多声道",
+    constants.QUALITY_AUTO: "Auto (best available)",
+    constants.QUALITY_FLAC: "FLAC lossless",
+    constants.QUALITY_DOLBY: "Dolby multi-channel",
     constants.QUALITY_AAC192: "AAC 192k",
     constants.QUALITY_AAC132: "AAC 132k",
     constants.QUALITY_AAC64: "AAC 64k",
@@ -254,7 +255,8 @@ def _candidate_entries(value: Any, fallback_id: int, fallback_codec: str) -> lis
 
 
 def _collect_candidates(dash: dict[str, Any]) -> list[AudioStream]:
-    """Collect every audio candidate from a DASH payload.
+    """
+    Collect every audio candidate from a DASH payload.
 
     ``dash.audio`` is a list, ``dash.dolby.audio`` a list and
     ``dash.flac.audio`` either a dict or a list; membership fields may be
@@ -351,7 +353,8 @@ class BilibiliProvider(MusicProvider):
     # lifecycle
     # ------------------------------------------------------------------
     async def handle_async_init(self) -> None:
-        """Validate the runtime, read the stored credential and prepare the client.
+        """
+        Validate the runtime, read the stored credential and prepare the client.
 
         An invalid or expired login must never keep the provider from loading:
         account features simply stay unavailable and a warning is logged.
@@ -646,7 +649,8 @@ class BilibiliProvider(MusicProvider):
                     self._artist_names.setdefault(artist_id, name)
 
     def _duration_allowed(self, duration: int) -> bool:
-        """Apply the configured min/max track duration filter.
+        """
+        Apply the configured min/max track duration filter.
 
         Unknown durations are kept: dropping them would hide valid results while
         the API simply did not report a length.
@@ -788,8 +792,21 @@ class BilibiliProvider(MusicProvider):
         query = str(search_query or "").strip()
         if not query:
             return SearchResults()
+        explicit = await self._search_explicit(query, media_types)
+        if explicit is not None:
+            return explicit
+        if MediaType.TRACK not in media_types:
+            return SearchResults()
+        if _VIDEO_ID_RE.fullmatch(query):
+            return await self._search_video_id(query, media_types)
+        return await self._search_keyword(query, limit)
 
-        # Explicit collection query: BSEASON:<season id> or a collection URL.
+    async def _search_explicit(
+        self,
+        query: str,
+        media_types: list[MediaType],
+    ) -> SearchResults | None:
+        """Handle BSEASON/UP queries; ``None`` means the query is not explicit."""
         season_id = collections.season_id_from_query(query)
         if season_id is not None:
             if MediaType.PLAYLIST not in media_types:
@@ -802,48 +819,52 @@ class BilibiliProvider(MusicProvider):
                 raise self._translate_error(err) from err
             return SearchResults(playlists=[playlist])
 
-        # Explicit UP query: UP:<mid> or the UP's space URL lists collections.
         up_mid = collections.up_mid_from_query(query)
-        if up_mid is not None:
-            if MediaType.PLAYLIST not in media_types:
-                return SearchResults()
-            try:
-                playlists = await self._up_collections(up_mid)
-            except MediaNotFoundError:
-                return SearchResults()
-            except BiliApiError as err:
-                raise self._translate_error(err) from err
-            return SearchResults(playlists=playlists)
-
-        if MediaType.TRACK not in media_types:
+        if up_mid is None:
+            return None
+        if MediaType.PLAYLIST not in media_types:
             return SearchResults()
+        try:
+            playlists = await self._up_collections(up_mid)
+        except MediaNotFoundError:
+            return SearchResults()
+        except BiliApiError as err:
+            raise self._translate_error(err) from err
+        return SearchResults(playlists=playlists)
 
-        if _VIDEO_ID_RE.fullmatch(query):
+    async def _search_video_id(
+        self,
+        query: str,
+        media_types: list[MediaType],
+    ) -> SearchResults:
+        """Return one BV/av video and, when it has one, its collection."""
+        try:
+            data = await self._view(query)
+            track = parsers.parse_view(data, self.instance_id)
+        except ValueError as err:
+            raise MediaNotFoundError(f"Bilibili video {query} has no usable metadata") from err
+        # Keep this branch deliberately single-track; multi-part expansion
+        # lives on its own feature branch and is not part of this change.
+        item_id = f"av{query[2:]}" if query.lower().startswith("av") else query
+        track.item_id = item_id
+        for mapping in track.provider_mappings:
+            mapping.item_id = item_id
+        self._remember_artist_names([track])
+        # A video that belongs to a collection also surfaces the collection,
+        # so the user can open the whole list from the same search.
+        playlists: list[Playlist] = []
+        if MediaType.PLAYLIST in media_types:
             try:
-                data = await self._view(query)
-                track = parsers.parse_view(data, self.instance_id)
-            except ValueError as err:
-                raise MediaNotFoundError(f"Bilibili video {query} has no usable metadata") from err
-            # Keep this branch deliberately single-track; multi-part expansion
-            # lives on its own feature branch and is not part of this change.
-            item_id = f"av{query[2:]}" if query.lower().startswith("av") else query
-            track.item_id = item_id
-            for mapping in track.provider_mappings:
-                mapping.item_id = item_id
-            self._remember_artist_names([track])
-            # A video that belongs to a collection also surfaces the collection,
-            # so the user can open the whole list from the same search.
-            playlists: list[Playlist] = []
-            if MediaType.PLAYLIST in media_types:
-                try:
-                    if collection := await self._collection_from_view(data):
-                        playlists.append(collection)
-                except (BiliApiError, MediaNotFoundError, MusicAssistantError):
-                    self.logger.debug(
-                        "Could not resolve the collection of %s", query, exc_info=True
-                    )
-            return SearchResults(tracks=[track], playlists=playlists)
+                collection = await self._collection_from_view(data)
+            except BiliApiError, MediaNotFoundError, MusicAssistantError:
+                self.logger.debug("Could not resolve the collection of %s", query, exc_info=True)
+            else:
+                if collection is not None:
+                    playlists.append(collection)
+        return SearchResults(tracks=[track], playlists=playlists)
 
+    async def _search_keyword(self, query: str, limit: int) -> SearchResults:
+        """Search the Bilibili video index and map the hits to tracks."""
         search_cap = self._config_int(constants.CONF_SEARCH_LIMIT, constants.DEFAULT_SEARCH_LIMIT)
         if search_cap <= 0:
             search_cap = constants.DEFAULT_SEARCH_LIMIT
