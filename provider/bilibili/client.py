@@ -37,6 +37,8 @@ _NAV_PATH: Final = "/x/web-interface/nav"
 _SPACE_COLLECTIONS_PATH: Final = "/x/polymer/web-space/seasons_series_list"
 _SEASON_ARCHIVES_PATH: Final = "/x/polymer/web-space/seasons_archives_list"
 _SPACE_CARD_PATH: Final = "/x/web-interface/card"
+_AUDIO_SONG_INFO_PATH: Final = "/audio/music-service-c/web/song/info"
+_AUDIO_PLAYURL_PATH: Final = "/audio/music-service-c/web/url"
 
 
 class BiliApiError(Exception):
@@ -227,6 +229,30 @@ class BilibiliClient:
             raise ValueError("view() needs either bvid or aid")
         endpoint = "/x/web-interface/view"
         params = {"bvid": bvid} if bvid else {"aid": int(aid or 0)}
+        payload, _ = await self._request(
+            self._build_url(constants.BILI_API, endpoint, params), endpoint
+        )
+        return _data(payload)
+
+    async def audio_song_info(self, song_id: int) -> dict[str, Any]:
+        """Return the details of a Bilibili audio (music) song."""
+        endpoint = _AUDIO_SONG_INFO_PATH
+        payload, _ = await self._request(
+            self._build_url(constants.BILI_API, endpoint, {"sid": int(song_id)}), endpoint
+        )
+        return _data(payload)
+
+    async def audio_playurl(self, song_id: int, quality: int = 2) -> dict[str, Any]:
+        """Return the stream descriptors of a Bilibili audio (music) song."""
+        endpoint = _AUDIO_PLAYURL_PATH
+        params = {
+            "sid": int(song_id),
+            "quality": int(quality),
+            # privilege=2 asks for the highest quality the caller may play; anonymous
+            # requests pass mid=0 and still receive the free rendition.
+            "privilege": 2,
+            "mid": self.credential.mid or 0,
+        }
         payload, _ = await self._request(
             self._build_url(constants.BILI_API, endpoint, params), endpoint
         )

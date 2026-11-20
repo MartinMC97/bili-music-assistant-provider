@@ -143,6 +143,11 @@ class FakeClient:
         self.calls: list[tuple[Any, ...]] = []
         self.view_calls = 0
         self.fav_calls = 0
+        self.audio_song_data: dict[str, Any] = {}
+        self.audio_playurl_data: dict[str, Any] = {}
+        self.audio_error: Exception | None = None
+        self.audio_song_calls = 0
+        self.audio_playurl_calls = 0
 
     async def search_video(
         self, keyword: str, page: int = 1, page_size: int = 20
@@ -180,6 +185,22 @@ class FakeClient:
         self.calls.append(("fav_items", media_id, page, page_size))
         self.fav_calls += 1
         return copy.deepcopy(self.fav_data)
+
+    async def audio_song_info(self, song_id: int) -> dict[str, Any]:
+        """Return the canned audio song payload."""
+        self.calls.append(("audio_song_info", song_id))
+        self.audio_song_calls += 1
+        if self.audio_error is not None:
+            raise self.audio_error
+        return copy.deepcopy(self.audio_song_data)
+
+    async def audio_playurl(self, song_id: int, quality: int = 2) -> dict[str, Any]:
+        """Return the canned audio stream payload."""
+        self.calls.append(("audio_playurl", song_id, quality))
+        self.audio_playurl_calls += 1
+        if self.audio_error is not None:
+            raise self.audio_error
+        return copy.deepcopy(self.audio_playurl_data)
 
     async def close(self) -> None:
         """Nothing to close: the HTTP session is shared."""
@@ -673,6 +694,100 @@ async def test_view_lookup_is_retried_after_a_failure() -> None:
     assert client.view_calls == 2
 
 
+AUDIO_SONG: dict[str, Any] = {
+    "id": 2533988,
+    "title": "小柔晴天 (cover)",
+    "duration": 286,
+    "cover": "http://i0.hdslb.com/bfs/music/x.jpg",
+    "uname": "小柔Channel",
+    "uid": 1734978373,
+    "statistic": {"play": 56392},
+    "ctime": 1630639156,
+}
+AUDIO_CDN_HOST = "upos-sz-mirrorhw.bilivideo.com"
+
+
+def audio_stream_payload(delay: int = 7200) -> dict[str, Any]:
+    """Build an audio stream payload with a signed-looking CDN URL and deadline."""
+    deadline = int(time.time()) + delay
+    return {
+        "cdns": [f"https://{AUDIO_CDN_HOST}/ugaxcode/abc-192k.m4a?deadline={deadline}&token=x"],
+        "size": 168,
+        "timeout": delay,
+        "type": 1,
+    }
+
+
+async def test_get_track_audio_song() -> None:
+    """An ``au:`` id resolves through the audio song endpoint and is cached."""
+    client = FakeClient()
+    client.audio_song_data = AUDIO_SONG
+    provider, _ = await make_provider(client=client)
+
+    track = await provider.get_track("au:2533988")
+
+    assert track.item_id == "au:2533988"
+    assert track.name == "小柔晴天"
+    assert track.duration == 286
+    assert track.artists[0].name == "小柔Channel"
+    mapping = next(iter(track.provider_mappings))
+    assert mapping.url == "https://www.bilibili.com/audio/au2533988"
+
+    await provider.get_track("au:2533988")
+    assert client.audio_song_calls == 1
+
+
+async def test_get_stream_details_audio_song() -> None:
+    """An audio track resolves to a seekable M4A HTTP stream with CDN headers."""
+    payload = audio_stream_payload(delay=7200)
+    client = FakeClient()
+    client.audio_song_data = AUDIO_SONG
+    client.audio_playurl_data = payload
+    provider, _ = await make_provider(client=client)
+
+    details = await provider.get_stream_details("au:2533988", MediaType.TRACK)
+
+    assert details.path == payload["cdns"][0]
+    assert details.stream_type == StreamType.HTTP
+    assert details.audio_format is not None
+    assert details.audio_format.content_type == ContentType.M4A
+    assert details.audio_format.codec_type == ContentType.AAC
+    assert details.audio_format.sample_rate == 44100
+    assert details.audio_format.bit_rate == 192
+    assert details.duration == 286
+    assert details.extra_input_args == constants.FFMPEG_HEADERS
+    assert details.can_seek is True
+    assert details.allow_seek is True
+    assert details.expiration is not None
+    assert details.expiration <= constants.STREAM_EXPIRATION_MAX
+    assert details.data["host"] == AUDIO_CDN_HOST
+
+
+async def test_audio_track_unknown_song() -> None:
+    """A removed audio song maps to MediaNotFoundError."""
+    client = FakeClient()
+    client.audio_error = BiliApiError(
+        4511001, "音频未找到或已下架", "/audio/music-service-c/web/url"
+    )
+    provider, _ = await make_provider(client=client)
+
+    with pytest.raises(MediaNotFoundError):
+        await provider.get_track("au:999")
+    with pytest.raises(MediaNotFoundError):
+        await provider.get_stream_details("au:999", MediaType.TRACK)
+
+
+async def test_audio_stream_without_cdns_is_unplayable() -> None:
+    """A stream payload without CDN URLs is not playable."""
+    client = FakeClient()
+    client.audio_song_data = AUDIO_SONG
+    client.audio_playurl_data = {"cdns": []}
+    provider, _ = await make_provider(client=client)
+
+    with pytest.raises(UnplayableMediaError):
+        await provider.get_stream_details("au:2533988", MediaType.TRACK)
+
+
 async def test_get_track_rejects_empty_id() -> None:
     """An empty provider track id is a not-found error."""
     provider, _ = await make_provider(client=FakeClient())
@@ -927,7 +1042,16 @@ async def test_favorite_folder_listing_is_cached() -> None:
                     "duration": 200,
                     "attr": 0,
                     "upper": {"mid": 7, "name": "收藏 UP"},
-                }
+                },
+                {
+                    "id": 2533988,
+                    "type": 12,
+                    "title": "小柔晴天 (cover)",
+                    "duration": 286,
+                    "cover": "http://i0.hdslb.com/bfs/music/x.jpg",
+                    "upper": {"mid": 8, "name": "音频 UP"},
+                    "attr": 0,
+                },
             ],
             "has_more": False,
         }
@@ -938,9 +1062,10 @@ async def test_favorite_folder_listing_is_cached() -> None:
     second = await provider.get_playlist_tracks("fav:42", 0)
 
     # The cache round-trips the Track through JSON, so a hit must rebuild it.
-    assert [track.item_id for track in first] == ["BV1fav"]
-    assert [track.item_id for track in second] == ["BV1fav"]
+    assert [track.item_id for track in first] == ["BV1fav", "au:2533988"]
+    assert [track.item_id for track in second] == ["BV1fav", "au:2533988"]
     assert cast("Track", second[0]).artists[0].name == "收藏 UP"
+    assert cast("Track", second[1]).duration == 286
     assert client.fav_calls == 1
 
 

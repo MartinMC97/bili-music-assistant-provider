@@ -243,6 +243,13 @@ async def test_get_favorite_tracks_page_offset() -> None:
     """Page N starts at ``N * 20 + 1`` and requests page N + 1 from the API."""
     medias = [
         {"bvid": "BV1page", "type": 2, "title": "第一首", "duration": 10, "upper": {"name": "A"}},
+        {
+            "id": 2533988,
+            "type": 12,
+            "title": "音频收藏",
+            "duration": 286,
+            "upper": {"name": "A"},
+        },
         {"bvid": "BV2dead", "type": 2, "title": "失效", "attr": 1},
         {"bvid": "BV3page", "type": 2, "title": "第二首", "duration": 20, "upper": {"name": "A"}},
     ]
@@ -252,8 +259,8 @@ async def test_get_favorite_tracks_page_offset() -> None:
 
     tracks = await catalog.get_favorite_tracks(client, PROVIDER, "fav:123456", page=1)
 
-    assert [track.item_id for track in tracks] == ["BV1page", "BV3page"]
-    assert [track.position for track in tracks] == [21, 22]
+    assert [track.item_id for track in tracks] == ["BV1page", "au:2533988", "BV3page"]
+    assert [track.position for track in tracks] == [21, 22, 23]
     assert client.calls == [("fav_items", 123456, 2, 20)]
 
 
@@ -272,7 +279,7 @@ async def test_get_favorite_tracks_skips_parser_failures(
     monkeypatch.setattr(catalog, "parse_fav_item", flaky_parser)
     medias = [
         {"bvid": "BVok", "type": 2, "title": "正常", "duration": 10, "upper": {"name": "A"}},
-        {"bvid": "BVaudio", "type": 12, "title": "音频收藏", "duration": 10},
+        {"id": 2533988, "type": 12, "title": "音频收藏", "duration": 286},
         {"bvid": "BOOM", "type": 2, "title": "解析失败"},
         None,
         {},
@@ -283,8 +290,8 @@ async def test_get_favorite_tracks_skips_parser_failures(
 
     tracks = await catalog.get_favorite_tracks(client, PROVIDER, "fav:123456")
 
-    assert [track.item_id for track in tracks] == ["BVok"]
-    assert [track.position for track in tracks] == [1]
+    assert [track.item_id for track in tracks] == ["BVok", "au:2533988"]
+    assert [track.position for track in tracks] == [1, 2]
 
 
 # ---------------------------------------------------------------------------

@@ -299,6 +299,57 @@ def _audio_format(stream: AudioStream) -> AudioFormat:
     )
 
 
+def _audio_stream_urls(data: dict[str, Any]) -> list[str]:
+    """Return the playable CDN URLs of an audio stream payload."""
+    urls: list[str] = []
+    for entry in data.get("cdns") or []:
+        if isinstance(entry, str):
+            candidate = entry.strip()
+        elif isinstance(entry, dict):
+            candidate = str(entry.get("url") or "").strip()
+        else:
+            continue
+        if candidate:
+            urls.append(candidate)
+    return urls
+
+
+def _audio_stream_format(url: str) -> AudioFormat:
+    """Build the MA audio format for a Bilibili audio (music) stream URL."""
+    path = urlsplit(url).path.lower()
+    extension = path.rsplit(".", maxsplit=1)[-1] if "." in path else ""
+    # AudioFormat.bit_rate is in kbps (the model converts bps values on init).
+    if match := re.search(r"-(\d+)k\.", path):
+        bit_rate: int | None = int(match.group(1))
+    else:
+        bit_rate = None
+    if extension == "flac":
+        return AudioFormat(
+            content_type=ContentType.FLAC,
+            codec_type=ContentType.FLAC,
+            sample_rate=44100,
+            bit_depth=16,
+            channels=2,
+            bit_rate=bit_rate,
+        )
+    if extension == "mp3":
+        return AudioFormat(
+            content_type=ContentType.MP3,
+            codec_type=ContentType.MP3,
+            sample_rate=44100,
+            channels=2,
+            bit_rate=bit_rate,
+        )
+    # Bilibili audio songs are AAC-LC in an M4A container at 44.1 kHz stereo.
+    return AudioFormat(
+        content_type=ContentType.M4A,
+        codec_type=ContentType.AAC,
+        sample_rate=44100,
+        channels=2,
+        bit_rate=bit_rate,
+    )
+
+
 def _describe_error(err: Exception) -> str:
     """Return a short, URL-free description for a warning log line."""
     detail = str(err).strip()
@@ -438,8 +489,10 @@ class BilibiliProvider(MusicProvider):
         return await self._search_keyword(query, limit)
 
     async def get_track(self, prov_track_id: str) -> Track:
-        """Return full details for a ``bvid`` / ``bvid#cid`` track id."""
+        """Return full details for a ``bvid`` / ``bvid#cid`` / ``au:<id>`` track id."""
         raw = str(prov_track_id or "").strip()
+        if (song_id := parsers.audio_song_id(raw)) is not None:
+            return await self._audio_track(song_id)
         base, cid = self._split_track_id(raw)
         data = await self._view(base)
 
@@ -500,6 +553,8 @@ class BilibiliProvider(MusicProvider):
             raise MediaNotFoundError(_TRACK_MEDIA_TYPE_ERROR.format(media_type=media_type))
 
         raw = str(item_id or "").strip()
+        if (song_id := parsers.audio_song_id(raw)) is not None:
+            return await self._audio_stream_details(raw, song_id)
         base, cid = self._split_track_id(raw)
         avid = self._avid(base)
 
@@ -837,6 +892,66 @@ class BilibiliProvider(MusicProvider):
             )
         ]
 
+    async def _audio_track(self, song_id: int) -> Track:
+        """Return the Track of one Bilibili audio (music) song."""
+        data = await self._audio_song_info(song_id)
+        track = parsers.parse_audio_song(data, self.instance_id)
+        if track is None:
+            raise MediaNotFoundError(f"Bilibili audio {song_id} has no usable metadata")
+        self._remember_artist_names([track])
+        return track
+
+    @use_cache(constants.AUDIO_INFO_CACHE_TTL)
+    async def _audio_song_info(self, song_id: int) -> dict[str, Any]:
+        """Return the song detail payload of one audio track (cached)."""
+        try:
+            return await self._require_client().audio_song_info(song_id)
+        except BiliApiError as err:
+            raise self._translate_error(err) from err
+
+    async def _audio_playurl(self, song_id: int) -> dict[str, Any]:
+        """Return an audio stream payload, trying the available qualities best first."""
+        client = self._require_client()
+        last_error: BiliApiError | None = None
+        for quality in constants.AUDIO_QUALITY_ATTEMPTS:
+            try:
+                data = await client.audio_playurl(song_id, quality)
+            except BiliApiError as err:
+                last_error = err
+                # an unavailable song does not improve on a lower quality
+                if err.code == 4511001:
+                    break
+                continue
+            if _audio_stream_urls(data):
+                return data
+        if last_error is not None:
+            raise self._translate_error(last_error) from last_error
+        return {}
+
+    async def _audio_stream_details(self, item_id: str, song_id: int) -> StreamDetails:
+        """Resolve the HTTP stream of one Bilibili audio (music) song."""
+        data = await self._audio_playurl(song_id)
+        urls = _audio_stream_urls(data)
+        if not urls:
+            raise UnplayableMediaError(f"Bilibili returned no audio stream for {item_id}")
+        url = urls[0]
+        song = await self._audio_song_info(song_id)
+        duration = _as_int(song.get("duration"), 0) or None
+        return StreamDetails(
+            provider=self.instance_id,
+            item_id=item_id,
+            media_type=MediaType.TRACK,
+            audio_format=_audio_stream_format(url),
+            stream_type=StreamType.HTTP,
+            path=url,
+            duration=duration,
+            can_seek=True,
+            allow_seek=True,
+            expiration=_stream_expiration(url),
+            extra_input_args=list(constants.FFMPEG_HEADERS),
+            data={"host": _host(url)},
+        )
+
     def _remember_artist_names(self, items: Iterable[Any]) -> None:
         """Remember UP-owner ids/names so get_artist can answer from memory."""
         for item in items:
@@ -896,7 +1011,7 @@ class BilibiliProvider(MusicProvider):
                 f"Bilibili rejected the request at {endpoint}",
                 backoff_time=60,
             )
-        if code in (-404, 62002, 62004):
+        if code in (-404, 62002, 62004, 4511001):
             return MediaNotFoundError(f"Bilibili media is unavailable at {endpoint} (code {code})")
         if code in (87007, 87008):
             return UnplayableMediaError(

@@ -403,6 +403,45 @@ async def test_favorite_endpoints() -> None:
     }
 
 
+async def test_audio_song_endpoints() -> None:
+    """Audio song info/stream calls send sid, quality and the numeric mid."""
+    client, mass = make_client(
+        [
+            FakeResponse({"code": 0, "data": {"id": 2533988, "title": "x"}}),
+            FakeResponse(
+                {
+                    "code": 0,
+                    "data": {"cdns": ["https://cdn.example/x-192k.m4a"], "timeout": 3600},
+                }
+            ),
+        ],
+        BilibiliCredential(sessdata="sess", dedeuserid="42"),
+    )
+
+    info = await client.audio_song_info(2533988)
+    stream = await client.audio_playurl(2533988, quality=1)
+
+    assert info["id"] == 2533988
+    assert stream["cdns"] == ["https://cdn.example/x-192k.m4a"]
+    urls = mass.http_session.urls()
+    assert urls[0] == (f"{constants.BILI_API}/audio/music-service-c/web/song/info?sid=2533988")
+    assert parse_qs(urlsplit(urls[1]).query) == {
+        "sid": ["2533988"],
+        "quality": ["1"],
+        "privilege": ["2"],
+        "mid": ["42"],
+    }
+
+
+async def test_audio_song_info_error_is_raised() -> None:
+    """A removed audio song surfaces as BiliApiError for the provider to translate."""
+    client, _ = make_client([FakeResponse({"code": 4511001, "message": "音频未找到或已下架"})])
+
+    with pytest.raises(BiliApiError) as info:
+        await client.audio_song_info(1)
+    assert info.value.code == 4511001
+
+
 async def test_close_is_a_noop() -> None:
     """The shared MA session must not be closed by the provider."""
     client, _ = make_client([])
