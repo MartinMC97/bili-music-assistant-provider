@@ -136,6 +136,9 @@ def parse_ranking_item(item: dict, provider_instance: str) -> Track | None: ...
 - `provider_mappings={ProviderMapping(item_id=..., provider_domain="bilibili", provider_instance=..., available=True, url=...)}`。
 - `parse_fav_folder` 返回 `Playlist(item_id=f"fav:{id}", name=title, owner=owner_name, is_editable=False, provider=..., provider_mappings={...})`。
 - 跳过无效项返回 `None`，不要抛异常。
+- `parse_fav_item` 只接受 `type == 2`（普通视频）的收藏条目：收藏夹里还会出现音频（`type=12`）、
+  番剧/OGV 剧集（`type=24`）、合集（`type=21`）等条目，接口同样会填 `bvid`，但该 bvid 指向的是
+  无关视频，会导致列表显示一个标题、`get_track` / `playurl` 却解析出另一个视频，必须跳过。
 
 ## `catalog.py`
 
@@ -158,7 +161,7 @@ async def browse_items(
 
 - `playlist_id` 形如 `fav:12345`；解析失败抛 `MediaNotFoundError`。
 - 收藏夹分页：`pn` 从 1，`has_more` 继续；`position` 跨页从 1 连续递增。
-- 失效稿件 `attr != 0` 跳过。
+- 失效稿件 `attr != 0` 跳过；非视频条目（见 `parse_fav_item`）同样跳过。
 - 匿名（`client.credential.has_login == False`）：`iter_favorite_playlists` 直接 `return`，不报错。
 - 推荐行 id：`rank_music` / `new_music` / `region_music`。
 - browse 根路径为空或 `bilibili://`；子路径 `rank`、`new`、`favorites`。

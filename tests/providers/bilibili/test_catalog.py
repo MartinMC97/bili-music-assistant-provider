@@ -242,9 +242,9 @@ async def test_get_favorite_tracks_skips_invalid_items_and_numbers_positions() -
 async def test_get_favorite_tracks_page_offset() -> None:
     """Page N starts at ``N * 20 + 1`` and requests page N + 1 from the API."""
     medias = [
-        {"bvid": "BV1page", "title": "第一首", "duration": 10, "upper": {"name": "A"}},
-        {"bvid": "BV2dead", "title": "失效", "attr": 1},
-        {"bvid": "BV3page", "title": "第二首", "duration": 20, "upper": {"name": "A"}},
+        {"bvid": "BV1page", "type": 2, "title": "第一首", "duration": 10, "upper": {"name": "A"}},
+        {"bvid": "BV2dead", "type": 2, "title": "失效", "attr": 1},
+        {"bvid": "BV3page", "type": 2, "title": "第二首", "duration": 20, "upper": {"name": "A"}},
     ]
     client = FakeClient(
         fav_item_pages={2: {"medias": medias, "has_more": True}},
@@ -271,8 +271,9 @@ async def test_get_favorite_tracks_skips_parser_failures(
 
     monkeypatch.setattr(catalog, "parse_fav_item", flaky_parser)
     medias = [
-        {"bvid": "BVok", "title": "正常", "duration": 10, "upper": {"name": "A"}},
-        {"bvid": "BOOM", "title": "解析失败"},
+        {"bvid": "BVok", "type": 2, "title": "正常", "duration": 10, "upper": {"name": "A"}},
+        {"bvid": "BVaudio", "type": 12, "title": "音频收藏", "duration": 10},
+        {"bvid": "BOOM", "type": 2, "title": "解析失败"},
         None,
         {},
     ]

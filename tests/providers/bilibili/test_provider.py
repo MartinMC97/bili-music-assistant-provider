@@ -922,6 +922,7 @@ async def test_favorite_folder_listing_is_cached() -> None:
             "medias": [
                 {
                     "bvid": "BV1fav",
+                    "type": 2,
                     "title": "收藏的歌",
                     "duration": 200,
                     "attr": 0,

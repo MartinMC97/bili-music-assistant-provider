@@ -12,7 +12,8 @@
           "name": "UP-A"
         },
         "attr": 0,
-        "fav_time": 1700000000
+        "fav_time": 1700000000,
+        "type": 2
       },
       {
         "bvid": "BV1xx411c7mD",
@@ -24,7 +25,8 @@
           "name": "UP-B"
         },
         "attr": 9,
-        "fav_time": 1700000001
+        "fav_time": 1700000001,
+        "type": 2
       },
       {
         "bvid": "BV1d4411N7zD",
@@ -36,7 +38,8 @@
           "name": "UP-C"
         },
         "attr": 0,
-        "fav_time": 1700000002
+        "fav_time": 1700000002,
+        "type": 2
       }
     ],
     "has_more": false
