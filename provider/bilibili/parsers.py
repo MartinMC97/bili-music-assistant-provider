@@ -25,7 +25,13 @@ from music_assistant_models.media_items import (
     UniqueList,
 )
 
-from .constants import COLLECTION_PLAYLIST_PREFIX, NOISE_PATTERNS, PROVIDER_DOMAIN
+from .constants import (
+    AUDIO_TRACK_PREFIX,
+    AUDIO_TRACK_URL,
+    COLLECTION_PLAYLIST_PREFIX,
+    NOISE_PATTERNS,
+    PROVIDER_DOMAIN,
+)
 
 BILIBILI_WEB = "https://www.bilibili.com"
 VIDEO_URL = f"{BILIBILI_WEB}/video/{{video_id}}"
@@ -328,6 +334,87 @@ def parse_search_item(item: Any, provider_instance: str) -> Track | None:
     return _parse_video_item(item, provider_instance)
 
 
+def audio_song_id(item_id: Any) -> int | None:
+    """Return the song id when *item_id* is an ``au:<song id>`` track id."""
+    raw = str(item_id or "").strip()
+    if not raw.lower().startswith(AUDIO_TRACK_PREFIX):
+        return None
+    song_id = _as_int(raw[len(AUDIO_TRACK_PREFIX) :].strip())
+    return song_id if song_id and song_id > 0 else None
+
+
+def _build_audio_track(
+    *,
+    song_id: int,
+    provider_instance: str,
+    raw_title: str,
+    duration: Any,
+    author: Any,
+    mid: Any,
+    cover: Any,
+    popularity: Any = None,
+    pubdate: Any = None,
+    date_added: Any = None,
+) -> Track:
+    """Assemble a Track for a Bilibili audio (music) song entry."""
+    item_id = f"{AUDIO_TRACK_PREFIX}{int(song_id)}"
+    url = AUDIO_TRACK_URL.format(id=int(song_id))
+    image = _image(cover, provider_instance)
+    artist = _artist(author, mid, provider_instance)
+    # The contract keeps the untouched API title for reference/lyrics matching.
+    description = extract_em_tags(raw_title) or None
+
+    metadata = MediaItemMetadata(
+        description=description,
+        images=UniqueList([image]) if image is not None else None,
+        links={MediaItemLink(type=LinkType.WEBSITE, url=url)},
+        popularity=_as_int(popularity),
+        release_date=_from_timestamp(pubdate),
+    )
+
+    return Track(
+        item_id=item_id,
+        provider=provider_instance,
+        name=clean_title(raw_title) or item_id,
+        duration=parse_duration(duration),
+        artists=UniqueList([artist]) if artist is not None else UniqueList(),
+        metadata=metadata,
+        provider_mappings={
+            ProviderMapping(
+                item_id=item_id,
+                provider_domain=PROVIDER_DOMAIN,
+                provider_instance=provider_instance,
+                available=True,
+                url=url,
+            )
+        },
+        date_added=_from_timestamp(date_added),
+    )
+
+
+def parse_audio_song(data: Any, provider_instance: str) -> Track | None:
+    """Convert a Bilibili audio (music) song info payload into a Track."""
+    if not isinstance(data, dict):
+        return None
+    song_id = _as_int(data.get("id"))
+    raw_title = _text(data.get("title"))
+    if not song_id or song_id <= 0 or not raw_title:
+        return None
+    statistics = data.get("statistic")
+    statistic: dict[str, Any] = statistics if isinstance(statistics, dict) else {}
+    return _build_audio_track(
+        song_id=song_id,
+        provider_instance=provider_instance,
+        raw_title=raw_title,
+        duration=data.get("duration"),
+        author=data.get("uname") or data.get("author"),
+        mid=data.get("uid"),
+        cover=data.get("cover"),
+        popularity=statistic.get("play"),
+        pubdate=data.get("ctime"),
+    )
+
+
 def parse_view(data: Any, provider_instance: str) -> Track:
     """Convert a ``/x/web-interface/view`` payload into a Track."""
     if not isinstance(data, dict):
@@ -375,7 +462,7 @@ def parse_view(data: Any, provider_instance: str) -> Track:
 
 
 def parse_fav_item(item: Any, provider_instance: str) -> Track | None:
-    """Convert one favorite *video* entry; unavailable or non-video items -> None."""
+    """Convert one favorite video or audio entry; unavailable/unsupported items -> None."""
     if not isinstance(item, dict):
         return None
 
@@ -383,21 +470,42 @@ def parse_fav_item(item: Any, provider_instance: str) -> Track | None:
     if attr not in (None, 0):
         return None
 
-    # A favorite folder also holds audio (type 12), OGV episodes (type 24), collections
-    # (type 21), ... The API still fills their ``bvid`` field, but with an unrelated video
-    # id: the list would show the entry's own title/cover while get_track and playurl
-    # resolve another video. Only plain video entries (type 2) are playable through the
-    # video endpoints, so skip everything else.
-    if _as_int(item.get("type")) != 2:
+    media_type = _as_int(item.get("type"))
+    raw_title = _text(item.get("title"))
+    raw_upper = item.get("upper")
+    upper: dict[str, Any] = raw_upper if isinstance(raw_upper, dict) else {}
+
+    # Audio (music) entries are real playable audio tracks; their ``id`` is the song id,
+    # which the audio endpoints accept. Their ``bvid`` field is unrelated, so it must not
+    # be used.
+    if media_type == 12:
+        song_id = _as_int(item.get("id"))
+        if not song_id or song_id <= 0 or not raw_title:
+            return None
+        counts = item.get("cnt_info")
+        cnt_info: dict[str, Any] = counts if isinstance(counts, dict) else {}
+        return _build_audio_track(
+            song_id=song_id,
+            provider_instance=provider_instance,
+            raw_title=raw_title,
+            duration=item.get("duration"),
+            author=upper.get("name") or item.get("author"),
+            mid=upper.get("mid") or item.get("mid"),
+            cover=item.get("cover"),
+            popularity=cnt_info.get("play"),
+            pubdate=item.get("pubtime") or item.get("ctime"),
+            date_added=item.get("fav_time"),
+        )
+
+    # Other non-video entries (OGV episodes type 24, collections type 21, ...) would resolve
+    # the wrong video when played, so they are skipped.
+    if media_type != 2:
         return None
 
     bvid = _text(item.get("bvid"))
-    raw_title = _text(item.get("title"))
     if not bvid or not raw_title:
         return None
 
-    raw_upper = item.get("upper")
-    upper: dict[str, Any] = raw_upper if isinstance(raw_upper, dict) else {}
     return _build_track(
         item_id=bvid,
         provider_instance=provider_instance,

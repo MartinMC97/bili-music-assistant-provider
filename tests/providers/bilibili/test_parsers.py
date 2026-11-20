@@ -17,8 +17,10 @@ from music_assistant_models.media_items import (
 )
 
 from bilibili.parsers import (
+    audio_song_id,
     clean_title,
     extract_em_tags,
+    parse_audio_song,
     parse_duration,
     parse_fav_folder,
     parse_fav_item,
@@ -297,8 +299,48 @@ def test_parse_fav_item() -> None:
     assert third.artists[0].item_id == "789"
 
 
-def test_parse_fav_item_skips_non_video_entries() -> None:
-    """Audio, OGV and collection entries are not playable video tracks."""
+AUDIO_FAV_ITEM = {
+    "id": 2533988,
+    "type": 12,
+    "title": "小柔晴天 (cover)",
+    "duration": 286,
+    "cover": "http://i0.hdslb.com/bfs/music/x.jpg",
+    "upper": {"mid": 1734978373, "name": "小柔Channel"},
+    "cnt_info": {"collect": 1099, "play": 56392},
+    "pubtime": 1630639156,
+    "fav_time": 1647261364,
+    "attr": 0,
+    # the favorite API fills this with an unrelated video id; it must be ignored
+    "bvid": "BV1Vs411S7Mt",
+}
+
+
+def test_parse_fav_item_audio_entry() -> None:
+    """An audio favorite becomes an ``au:`` track backed by the audio endpoints."""
+    track = parse_fav_item(AUDIO_FAV_ITEM, PROVIDER)
+
+    assert isinstance(track, Track)
+    assert track.item_id == "au:2533988"
+    assert track.name == "小柔晴天"
+    assert track.duration == 286
+    assert track.artists[0].item_id == "1734978373"
+    assert track.artists[0].name == "小柔Channel"
+    assert track.metadata.images is not None
+    assert track.metadata.images[0].path == "https://i0.hdslb.com/bfs/music/x.jpg"
+    assert track.metadata.popularity == 56392
+    assert track.metadata.links is not None
+    assert next(iter(track.metadata.links)).url == "https://www.bilibili.com/audio/au2533988"
+    mapping = next(iter(track.provider_mappings))
+    assert mapping.item_id == "au:2533988"
+    assert mapping.url == "https://www.bilibili.com/audio/au2533988"
+
+    # an audio entry without a numeric song id cannot be played
+    assert parse_fav_item({**AUDIO_FAV_ITEM, "id": 0}, PROVIDER) is None
+    assert parse_fav_item({**AUDIO_FAV_ITEM, "title": ""}, PROVIDER) is None
+
+
+def test_parse_fav_item_skips_unsupported_entries() -> None:
+    """OGV and collection entries still resolve an unrelated video, so they are skipped."""
     video = {
         "bvid": "BV1GJ411x7h7",
         "type": 2,
@@ -307,9 +349,8 @@ def test_parse_fav_item_skips_non_video_entries() -> None:
         "attr": 0,
     }
     assert parse_fav_item(video, PROVIDER) is not None
-    # audio (12), video collection (21) and OGV episode (24) entries carry a bvid that
-    # resolves to an unrelated video, so they must not become tracks.
-    for media_type in (12, 21, 24):
+    # video collection (21) and OGV episode (24) entries
+    for media_type in (21, 24):
         assert parse_fav_item({**video, "type": media_type}, PROVIDER) is None
     # without a type the entry cannot be trusted to be a video either
     assert parse_fav_item({k: v for k, v in video.items() if k != "type"}, PROVIDER) is None
@@ -321,6 +362,41 @@ def test_parse_fav_item_invalid() -> None:
     assert parse_fav_item({"bvid": "BV1xx411c7mD", "type": 2}, PROVIDER) is None
     assert parse_fav_item({"title": "晴天", "type": 2, "attr": 0}, PROVIDER) is None
     assert parse_fav_item(None, PROVIDER) is None
+
+
+def test_audio_song_id() -> None:
+    """Only ``au:<number>`` ids address an audio track."""
+    assert audio_song_id("au:2533988") == 2533988
+    assert audio_song_id(" AU: 2533988 ") == 2533988
+    assert audio_song_id("au:0") is None
+    assert audio_song_id("au:abc") is None
+    assert audio_song_id("BV1GJ411x7h7") is None
+    assert audio_song_id(None) is None
+
+
+def test_parse_audio_song() -> None:
+    """Audio song info payloads become ``au:`` tracks."""
+    song = {
+        "id": 2533988,
+        "title": "小柔晴天 (cover)",
+        "duration": 286,
+        "cover": "http://i0.hdslb.com/bfs/music/x.jpg",
+        "uname": "小柔Channel",
+        "uid": 1734978373,
+        "statistic": {"play": 56392},
+        "ctime": 1630639156,
+    }
+    track = parse_audio_song(song, PROVIDER)
+
+    assert isinstance(track, Track)
+    assert track.item_id == "au:2533988"
+    assert track.name == "小柔晴天"
+    assert track.duration == 286
+    assert track.artists[0].name == "小柔Channel"
+
+    assert parse_audio_song({}, PROVIDER) is None
+    assert parse_audio_song({"id": 2533988}, PROVIDER) is None
+    assert parse_audio_song(None, PROVIDER) is None
 
 
 def test_parse_fav_folder() -> None:

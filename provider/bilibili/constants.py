@@ -124,6 +124,21 @@ COLLECTION_META_TTL: Final = 600
 UP_PROFILE_TTL: Final = 3600
 
 # ---------------------------------------------------------------------------
+# audio tracks (Bilibili 音频 / music)
+# ---------------------------------------------------------------------------
+#: Item ids of audio tracks, e.g. ``au:2533988`` (the id is the audio/music sid).
+AUDIO_TRACK_PREFIX: Final = "au:"
+
+#: Public web page of an audio track.
+AUDIO_TRACK_URL: Final = "https://www.bilibili.com/audio/au{id}"
+
+#: Song details rarely change; cache them like a video view payload.
+AUDIO_INFO_CACHE_TTL: Final = 24 * 3600
+
+#: Quality ids to request from the audio stream endpoint, best first.
+AUDIO_QUALITY_ATTEMPTS: Final = (2, 1, 0)
+
+# ---------------------------------------------------------------------------
 # title noise
 # ---------------------------------------------------------------------------
 # Applied after HTML tags are stripped. Kept deliberately small: removing too

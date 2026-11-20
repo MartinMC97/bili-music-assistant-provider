@@ -83,6 +83,8 @@ class BilibiliClient:
     async def search_video(self, keyword: str, page: int = 1, page_size: int = 20) -> list[dict]: ...
     async def view(self, bvid: str) -> dict: ...             # data
     async def playurl(self, *, bvid: str | None = None, avid: int | None = None, cid: int) -> dict: ...
+    async def audio_song_info(self, song_id: int) -> dict: ...       # data
+    async def audio_playurl(self, song_id: int, quality: int = 2) -> dict: ...  # data.cdns
     async def ranking_region(self, rid: int = 3, day: int = 3) -> list[dict]: ...
     async def music_rank(self, ps: int = 30) -> list[dict]: ...
     async def new_music(self) -> list[dict]: ...
@@ -101,6 +103,10 @@ class BilibiliClient:
 - 每个请求带 `Referer: https://www.bilibili.com`、`Origin: https://www.bilibili.com`、`User-Agent: constants.USER_AGENT`；有凭据时加 `Cookie`。
 - 搜索用 WBI：`/x/web-interface/wbi/search/type?search_type=video&keyword=...&page=...&page_size=...`。
 - `playurl` 固定 `qn=0&fnver=0&fnval=16&fourk=1`，参数二选一（`bvid` 或 `avid`）加 `cid`。
+- 音频（B 站「音频」/ music）：`/audio/music-service-c/web/song/info?sid=<song id>` 取详情，
+  `/audio/music-service-c/web/url?sid=<song id>&quality=<q>&privilege=2&mid=<mid>` 取流；
+  `data.cdns` 是 URL 字符串列表，URL 约 3 小时后过期（`deadline`），CDN 同样需要 Referer/UA。
+  `quality` 只是尽力请求（很多歌只有单一码率），失败时按 `constants.AUDIO_QUALITY_ATTEMPTS` 逐级回退。
 - `nav` 的 `code=-101` 不是错误，必须返回 `data`（含 `wbi_img`）。
 - `qrcode_poll` 的 HTTP 可能 200 但 `data.code` 是 `86101/86090/86038/0`；不要按 HTTP 错误处理。
 - 失败统一抛 `BiliApiError`；provider 层负责翻译成 MA 异常。
@@ -118,6 +124,8 @@ def extract_em_tags(raw: str) -> str: ...                    # 去 <em> 等 HTML
 
 def parse_search_item(item: dict, provider_instance: str) -> Track | None: ...
 def parse_view(data: dict, provider_instance: str) -> Track: ...
+def audio_song_id(item_id: str) -> int | None: ...
+def parse_audio_song(data: dict, provider_instance: str) -> Track | None: ...
 def parse_fav_item(item: dict, provider_instance: str) -> Track | None: ...
 def parse_fav_folder(item: dict, provider_instance: str, owner_name: str) -> Playlist: ...
 def parse_music_center_item(item: dict, provider_instance: str) -> Track | None: ...
@@ -126,7 +134,7 @@ def parse_ranking_item(item: dict, provider_instance: str) -> Track | None: ...
 
 映射要求：
 
-- `Track.item_id = bvid`（多 P 用 `bvid#cid`）；`Track.provider = provider_instance`。
+- `Track.item_id = bvid`（多 P 用 `bvid#cid`）；音频条目用 `au:<song id>`；`Track.provider = provider_instance`。
 - `Track.name = clean_title(title)`；保留原始标题到 `metadata.description`。
 - `Track.artists` 用 `ItemMapping(item_id=str(mid), provider=provider_instance, name=author)`。
 - 封面：`//` → `https://`；`MediaItemImage(type=ImageType.THUMB, path=..., provider=..., remotely_accessible=True)`。
@@ -136,9 +144,11 @@ def parse_ranking_item(item: dict, provider_instance: str) -> Track | None: ...
 - `provider_mappings={ProviderMapping(item_id=..., provider_domain="bilibili", provider_instance=..., available=True, url=...)}`。
 - `parse_fav_folder` 返回 `Playlist(item_id=f"fav:{id}", name=title, owner=owner_name, is_editable=False, provider=..., provider_mappings={...})`。
 - 跳过无效项返回 `None`，不要抛异常。
-- `parse_fav_item` 只接受 `type == 2`（普通视频）的收藏条目：收藏夹里还会出现音频（`type=12`）、
-  番剧/OGV 剧集（`type=24`）、合集（`type=21`）等条目，接口同样会填 `bvid`，但该 bvid 指向的是
-  无关视频，会导致列表显示一个标题、`get_track` / `playurl` 却解析出另一个视频，必须跳过。
+- `parse_fav_item`：`type == 2` 的普通视频映射为 bvid 曲目；`type == 12` 的音频映射为
+  `au:<song id>` 曲目（`id` 字段才是音频 id，`bvid` 字段指向无关视频，不可使用）；
+  番剧/OGV 剧集（`type=24`）、合集（`type=21`）等其它条目无法通过视频/音频接口播放，跳过。
+- 音频条目：`metadata.links` / `provider_mappings.url` 用 `https://www.bilibili.com/audio/au<id>`，
+  时长/封面/UP 主取自收藏条目或歌曲详情（`uname`/`uid`）。
 
 ## `catalog.py`
 
@@ -208,7 +218,10 @@ class BilibiliProvider(MusicProvider):
 
 `get_stream_details` 规则：
 
-- 解析 `bvid` / `cid`；无 `cid` 时 `view()` 取 `pages[0].cid`（也可支持 `bvid#cid`）。
+- `au:<song id>` 走音频分支：`audio_playurl` → `data.cdns[0]`；`audio_song_info` 取时长；
+  `StreamDetails(stream_type=HTTP, audio_format=M4A/AAC/44.1kHz/2ch, can_seek=True, allow_seek=True,
+  expiration=clamp(deadline), extra_input_args=constants.FFMPEG_HEADERS)`。
+- 否则解析 `bvid` / `cid`；无 `cid` 时 `view()` 取 `pages[0].cid`（也可支持 `bvid#cid`）。
 - `playurl` → `dash`；候选来自 `audio`（list）、`dolby.audio`（list）、`flac.audio`（dict/list）。
 - 按 `quality` 配置上限与 `AUDIO_ID_RANK` 排序；FLAC > Dolby > 30280 > 30232 > 30216。
 - `verify_stream_url` 为真时，对首选 URL 做 `Range: bytes=0-1023` 探测（1.5s），失败换 `backupUrl`；全失败只 warning 并返回首选。
@@ -222,7 +235,7 @@ class BilibiliProvider(MusicProvider):
 |---|---|
 | `-352` | `ResourceTemporarilyUnavailable(backoff_time=30)` |
 | `-412` | `ResourceTemporarilyUnavailable(backoff_time=60)` |
-| `-404/62002/62004` | `MediaNotFoundError` |
+| `-404/62002/62004/4511001` | `MediaNotFoundError` |
 | `87007/87008` | `UnplayableMediaError` |
 | 网络/5xx | `ResourceTemporarilyUnavailable` |
 
