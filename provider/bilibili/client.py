@@ -248,6 +248,8 @@ class BilibiliClient:
         params = {
             "sid": int(song_id),
             "quality": int(quality),
+            # privilege=2 asks for the highest quality the caller may play; anonymous
+            # requests pass mid=0 and still receive the free rendition.
             "privilege": 2,
             "mid": self.credential.mid or 0,
         }
