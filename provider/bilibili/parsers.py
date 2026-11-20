@@ -375,12 +375,20 @@ def parse_view(data: Any, provider_instance: str) -> Track:
 
 
 def parse_fav_item(item: Any, provider_instance: str) -> Track | None:
-    """Convert one favorite media entry; unavailable items (attr != 0) -> None."""
+    """Convert one favorite *video* entry; unavailable or non-video items -> None."""
     if not isinstance(item, dict):
         return None
 
     attr = _as_int(item.get("attr"))
     if attr not in (None, 0):
+        return None
+
+    # A favorite folder also holds audio (type 12), OGV episodes (type 24), collections
+    # (type 21), ... The API still fills their ``bvid`` field, but with an unrelated video
+    # id: the list would show the entry's own title/cover while get_track and playurl
+    # resolve another video. Only plain video entries (type 2) are playable through the
+    # video endpoints, so skip everything else.
+    if _as_int(item.get("type")) != 2:
         return None
 
     bvid = _text(item.get("bvid"))

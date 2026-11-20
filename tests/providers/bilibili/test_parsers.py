@@ -297,11 +297,29 @@ def test_parse_fav_item() -> None:
     assert third.artists[0].item_id == "789"
 
 
+def test_parse_fav_item_skips_non_video_entries() -> None:
+    """Audio, OGV and collection entries are not playable video tracks."""
+    video = {
+        "bvid": "BV1GJ411x7h7",
+        "type": 2,
+        "title": "小柔晴天 cover",
+        "upper": {"mid": 42, "name": "小柔Channel"},
+        "attr": 0,
+    }
+    assert parse_fav_item(video, PROVIDER) is not None
+    # audio (12), video collection (21) and OGV episode (24) entries carry a bvid that
+    # resolves to an unrelated video, so they must not become tracks.
+    for media_type in (12, 21, 24):
+        assert parse_fav_item({**video, "type": media_type}, PROVIDER) is None
+    # without a type the entry cannot be trusted to be a video either
+    assert parse_fav_item({k: v for k, v in video.items() if k != "type"}, PROVIDER) is None
+
+
 def test_parse_fav_item_invalid() -> None:
     """Missing required fields never raise."""
     assert parse_fav_item({}, PROVIDER) is None
-    assert parse_fav_item({"bvid": "BV1xx411c7mD"}, PROVIDER) is None
-    assert parse_fav_item({"title": "晴天", "attr": 0}, PROVIDER) is None
+    assert parse_fav_item({"bvid": "BV1xx411c7mD", "type": 2}, PROVIDER) is None
+    assert parse_fav_item({"title": "晴天", "type": 2, "attr": 0}, PROVIDER) is None
     assert parse_fav_item(None, PROVIDER) is None
 
 
