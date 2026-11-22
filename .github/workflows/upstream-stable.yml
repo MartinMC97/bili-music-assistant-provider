@@ -120,13 +120,19 @@ jobs:
           VERSION: ${{ needs.check.outputs.version }}
         shell: bash
         run: |
+          # Install the tool versions pinned in pyproject.toml (the same set CI uses) so
+          # this smoke test follows the upstream toolchain. Installing the newest PyPI
+          # ruff instead pulled in rules that were promoted out of preview after the
+          # official pin (e.g. CPY001), failing the build for style reasons only.
+          DEV_DEPS="$(python3 -c "import tomllib; print(' '.join(tomllib.load(open('pyproject.toml','rb'))['project']['optional-dependencies']['dev']))")"
           docker run --rm \
             -v "$PWD:/workspace" \
             -w /workspace \
             -e PYTHONDONTWRITEBYTECODE=1 \
+            -e DEV_DEPS="$DEV_DEPS" \
             --entrypoint sh \
             "ghcr.io/music-assistant/server:${VERSION}" \
-            -c "/app/venv/bin/uv pip install -q --python /app/venv/bin/python pytest pytest-asyncio ruff segno==1.6.6 && /app/venv/bin/python -m pytest -q && /app/venv/bin/ruff check provider tests"
+            -c "/app/venv/bin/uv pip install -q --python /app/venv/bin/python \$DEV_DEPS segno==1.6.6 && /app/venv/bin/python -m pytest -q && /app/venv/bin/ruff check provider tests"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
