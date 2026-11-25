@@ -18,7 +18,7 @@
 | `provider/bilibili/collections.py` | lead | UP 合集（season）：查询解析、分页、列表 |
 | `provider/bilibili/__init__.py` | agent-provider | provider 类与 feature 方法 |
 | `tests/providers/bilibili/*` | 各自模块作者 + agent-tests | provider 单元测试（官方要求按 provider 分目录） |
-| `docker/*`、`scripts/*`、`README.md` | lead | 环境与分发 |
+| `docker/*`、`scripts/*`、`README*.md` | lead | 环境与分发 |
 
 > 每个 agent 只改自己名下的文件；需要改别人的文件时，在 `docs/devlog.md` 里记一条 TODO，交给 lead。
 

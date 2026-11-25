@@ -44,6 +44,6 @@ jobs:
               /app/venv/bin/ruff check provider tests
               /app/venv/bin/ruff format --check provider tests
               /app/venv/bin/python -m mypy
-              /app/venv/bin/codespell provider tests scripts docs README.md
+              /app/venv/bin/codespell provider tests scripts docs README.md README.zh-CN.md
               /app/venv/bin/python scripts/check_provider_conventions.py
               /app/venv/bin/python -m pytest -q"

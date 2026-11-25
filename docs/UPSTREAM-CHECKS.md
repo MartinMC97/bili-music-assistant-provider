@@ -47,7 +47,7 @@ config entry / 选项 / setup flow 条目 / browse+recommendation 文件夹，
 ruff check provider tests
 ruff format --check provider tests
 python -m mypy
-codespell provider tests scripts docs README.md
+codespell provider tests scripts docs README.md README.zh-CN.md
 python scripts/check_provider_conventions.py
 python -m pytest -q
 ```

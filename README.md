@@ -1,54 +1,73 @@
-# bilibili-ma-provider
+# Bilibili provider for Music Assistant
 
-把 Bilibili 视频音轨接入 [Music Assistant](https://music-assistant.io) 的非官方音乐 provider。本项目只提供 Music Assistant 中的播放功能，不绕过会员/付费内容。请遵守 B 站服务条款，仅个人使用。
+[![CI](https://github.com/MartinMC97/bili-music-assistant-provider/actions/workflows/ci.yml/badge.svg)](https://github.com/MartinMC97/bili-music-assistant-provider/actions/workflows/ci.yml)
+[![Upstream stable release](https://github.com/MartinMC97/bili-music-assistant-provider/actions/workflows/upstream-stable.yml/badge.svg)](https://github.com/MartinMC97/bili-music-assistant-provider/actions/workflows/upstream-stable.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-## 能力
+**English** | [简体中文](README.zh-CN.md)
 
-- 搜索 B 站视频并映射为曲目（标题清洗、时长过滤、去重）
-- BV/av 直达搜索：搜索框输入完整 12 位 `BV...` 或 `av<数字>`，直接返回该视频的单条 Track（多 P 视频按分 P 播放暂未实现）
-- 播放 DASH 音轨（AAC / FLAC / Dolby，取决于账号权益）
-- 扫码登录 / 手填 SESSDATA / 匿名使用
-- 收藏夹同步（只读，需要登录；整夹分页已处理），收藏夹里的 B 站音频（`au`/音乐区）也会映射为曲目并可播放
-- 榜单/新歌推荐与浏览
-- UP 合集（合集/season）作为播放列表：`BSEASON:<id>`、合集链接、`UP:<mid>` 或 BV 反查
-- 不做歌词；UP 全量投稿列表接口风控严重（实测成功率很低），只支持 UP 的合集
-- B 站音频走音频专用接口，通常只有单一码率，DASH 音质选项（FLAC/Dolby/AAC）对音频曲目不生效；
-  收藏夹里的番剧/OGV、合集等非视频条目暂不支持
+An unofficial [Music Assistant](https://music-assistant.io) music provider that turns the audio
+track of [Bilibili](https://www.bilibili.com) videos into playable tracks.
 
-## UP 合集（合集 / season）
+The provider is read-only and streaming-only: it never downloads media, never modifies your
+Bilibili account and never bypasses memberships or paid content. It is intended for personal use;
+please follow Bilibili's terms of service.
 
-B 站「合集」是 UP 主整理的一组视频（`ugc_season`），这里映射成 MA 的**播放列表**。和直播一样，**必须显式指定**，普通搜索不受影响：
+> Status: alpha. The provider targets the Music Assistant 2.10 stable line. It is not affiliated
+> with or endorsed by Bilibili or the Music Assistant project.
 
-| 入口 | 说明 |
+## Features
+
+- **Search** the Bilibili video index and get playable tracks. Titles are cleaned of noise tags,
+  results are filtered by duration (60–900 seconds by default), de-duplicated and sorted by
+  popularity.
+- **Direct lookup** by a full `BV...` id or `av<id>`. A video that belongs to an UP collection
+  also returns that collection in the playlist section.
+- **DASH playback** — AAC 64/132/192 kbps, Hi-Res FLAC or Dolby, depending on the account's
+  entitlements and the quality ceiling configured on the provider. Streams are handed to ffmpeg
+  with the `Referer`, `Origin` and desktop `User-Agent` headers the CDN requires.
+- **Sign-in options**: QR code (recommended), a manual `SESSDATA` cookie (plus `DedeUserID` for
+  favorites), or anonymous. An expired credential degrades to anonymous instead of breaking the
+  provider.
+- **Favorite folders** as read-only playlists (login required, pagination handled), including
+  Bilibili audio (`au`) entries. Non-playable entries such as bangumi/OGV are skipped.
+- **Home rows and browsing**: music chart, new releases, regional music chart and favorites.
+- **UP collections** (合集 / UGC season) exposed as playlists — see
+  [UP collections as playlists](#up-collections-as-playlists).
+- **Bilibili audio** (`au` tracks) plays through the dedicated audio API. That endpoint usually
+  offers a single bitrate, so the DASH quality options do not apply to audio tracks.
+
+## Requirements
+
+| Component | Requirement |
 |---|---|
-| `BSEASON:7817533` | 用合集 id 直接打开该合集 |
-| `https://space.bilibili.com/3546851714271831/lists/7817533?type=season` | 直接粘合集链接（`channel/collectiondetail?sid=` 也支持） |
-| `UP:3546851714271831`（或该 UP 的空间链接） | 列出这个 UP 的全部合集 |
-| 搜 `BV1FMsn6REhn` | 如果该视频属于某个合集，结果里会同时出现视频和它所在的合集 |
+| Music Assistant | 2.10.7 or newer; built and tested against the current stable release (2.10.13) |
+| `music-assistant-models` | 1.1.205 or newer (bundled with Music Assistant) |
+| Development | Python 3.14 and Docker (the dev container provides Music Assistant and ffmpeg) |
 
-合集在 MA 里出现在搜索结果的「播放列表」分区，点开即可看到分页好的完整视频列表（每页 100 条，一个 169 集的合集两页加载完）。
+Music Assistant is currently on the 2.10 stable line; 2.11 is still in beta upstream and has not
+been validated with this provider yet.
 
-已知限制：
+The provider is not a PyPI package. Music Assistant only discovers providers that live in
+`music_assistant/providers/<domain>/`, so installing it means copying `provider/bilibili` into the
+Music Assistant package (or using one of the images below).
 
-- 只做合集，不做「系列」（`type=series` 的列表不支持）和 UP 全量投稿；
-- 合集内容按原样播放：里面可能是几十分钟的长混音，不套用搜索页的 60–900 秒时长过滤；
-- 合集不会自动进 MA 曲库（provider playlist 机制），通过搜索/ID 打开即可播放；
-- 合集 id 是数字，**纯数字单独搜索不会被当成合集**，避免和歌名混淆（和 `BLIVE:` 的设计一致）。
+## Installation
 
-## 安装
+A complete step-by-step guide is in **[docs/INSTALL.md](docs/INSTALL.md)** (currently Chinese
+only). The short version:
 
-完整步骤见 **[docs/INSTALL.md](docs/INSTALL.md)**。四种常用方式：
+### Option A — use the prebuilt image (recommended)
 
-### 方式 A：直接用构建好的 GHCR 镜像（最省事）
-
-GitHub Actions 已经把 provider 打进 MA 镜像，多架构（`linux/amd64` / `linux/arm64`）。
-包是**公开的，不需要登录**：
+GitHub Actions publishes Music Assistant images with the provider baked in. The package is public
+(no registry login needed) and multi-architecture (`linux/amd64` and `linux/arm64`):
 
 ```bash
 docker pull ghcr.io/martinmc97/music-assistant:latest
 ```
 
-把现有 MA 的 `image:` 换掉即可，**其它配置保持不动**：
+Point your existing Music Assistant service at that image and keep the rest of the configuration
+unchanged:
 
 ```yaml
 services:
@@ -56,9 +75,9 @@ services:
     image: ghcr.io/martinmc97/music-assistant:latest
     container_name: music-assistant
     restart: unless-stopped
-    network_mode: host          # MA 靠 host 网络发现播放器
+    network_mode: host          # Music Assistant discovers players over the host network
     volumes:
-      - /path/to/ma-data:/data  # 沿用你原来的数据目录
+      - /path/to/ma-data:/data  # your existing data directory
     environment:
       - LOG_LEVEL=info
 ```
@@ -67,7 +86,7 @@ services:
 docker compose up -d
 ```
 
-不用 compose 的话：
+Without compose:
 
 ```bash
 docker run -d --name music-assistant \
@@ -77,131 +96,241 @@ docker run -d --name music-assistant \
   ghcr.io/martinmc97/music-assistant:latest
 ```
 
-- 镜像里已经包含 `provider/bilibili` 和 `segno`（扫码登录用），启动后**不需要再装任何东西**
-- 默认 `latest` 跟随 main；想固定版本用 `2.10.8-bili-<commit>`（7 位短 id），升级时改 tag 再 `docker compose up -d`
-- 指定架构：`docker pull --platform linux/arm64 ghcr.io/martinmc97/music-assistant:latest`
-- 群晖/威联通等用 Container Manager 的，把上面的镜像地址填进「映像」再映射 `/data` 即可
+- The image already contains `provider/bilibili` and `segno` (needed for QR login); nothing has to
+  be installed after start-up.
+- `latest` follows the newest upstream Music Assistant stable release. To pin a build, use a tag
+  such as `2.10.13-bili-<7-character commit>`, for example
+  `ghcr.io/martinmc97/music-assistant:2.10.13-bili-11079f7`.
+- Pick an architecture explicitly with `docker pull --platform linux/arm64 ...` if needed.
+- On Synology/QNAP, put the image reference into Container Manager and map `/data` the same way.
 
-### 方式 B：自己构建镜像（要改代码时用）
-
-```bash
-docker build -f docker/Dockerfile -t music-assistant:2.10.8-bili .
-# 然后把 compose 里的 image 换成 music-assistant:2.10.8-bili
-```
-
-### 方式 C：快速塞进运行中的容器
+### Option B — build your own image (when changing code)
 
 ```bash
-./scripts/install_docker.sh music-assistant   # 容器重建后会丢，适合先试
+git clone https://github.com/MartinMC97/bili-music-assistant-provider.git bilibili-ma-provider
+cd bilibili-ma-provider
+
+# MA_VERSION selects the upstream base image; use the version your instance runs.
+docker build -f docker/Dockerfile --build-arg MA_VERSION=2.10.13 \
+  -t music-assistant:2.10.13-bili .
 ```
 
-### 方式 D：裸机 / venv
+Then replace the `image:` of your existing service with `music-assistant:2.10.13-bili` and keep
+the rest of the configuration. The Dockerfile copies the provider into Music Assistant's provider
+directory, installs `segno==1.6.6`, and keeps the official entrypoint.
+
+`docker/compose.build.yml` does the same thing in one step for a throw-away instance:
 
 ```bash
-/path/to/ma-venv/bin/python scripts/install_venv.py   # 用 MA 所在 venv 的 python
-```
-
-装完重启 MA，在 **Settings → Providers → Add Provider → Bilibili** 里扫码或填 SESSDATA 即可。
-HAOS Add-on 没有官方 provider 注入点，见 INSTALL.md。
-
-### 更新到新版本
-
-```bash
-docker compose pull music-assistant   # 或 docker pull <image>
-docker compose up -d
-```
-
-provider 更新不影响 `/data`；MA 自己的数据库迁移会在启动时自动完成，升级前建议备份数据目录。
-
-## 目录
-
-```text
-provider/bilibili/     # 唯一源码树（domain = bilibili）
-tests/                 # 单元测试 + 录制 fixture
-docker/                # 本地开发 compose + 可构建镜像
-scripts/               # dev / live E2E / 安装脚本
-docs/                  # 实现计划、契约、开发日志
-artifacts/             # 智能体分工笔记与代码评审
-```
-
-## 本地开发（不碰现有 MA）
-
-```bash
-# 1. 起一个独立的 MA（端口 18095）
-docker compose -f docker/compose.dev.yml up -d
-
-# 访问 http://localhost:18095 或 http://localhost:8095
-
-# 2. 改代码后重启并看日志
-./scripts/dev.sh
-
-# 3. 跑与官方仓库一致的检查（ruff 0.15.22 / mypy strict / codespell / pytest）
-docker exec -w /workspace bilibili-ma-dev /app/venv/bin/ruff check provider tests
-docker exec -w /workspace bilibili-ma-dev /app/venv/bin/ruff format --check provider tests
-docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python -m mypy
-docker exec -w /workspace bilibili-ma-dev /app/venv/bin/codespell provider tests scripts docs README.md
-docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/check_provider_conventions.py
-docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python -m pytest -q
-
-# 4. 真实播放 E2E（会访问 B 站 API/CDN）
-docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_stream.py
-
-# 5. 合集 E2E：BSEASON -> 播放列表 -> 分页 -> 取流 -> ffmpeg 解码
-docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_collections.py
-```
-
-首次启动后访问 `http://localhost:18095` 创建管理员账号，然后在 Settings → Providers 里添加 **Bilibili**。
-
-> 官方镜像把 MA 包放在 venv 的 site-packages 里（2.10.8 是
-> `/app/venv/lib/python3.14/site-packages/music_assistant`），compose 里的挂载路径按此设置。
-> Python 版本变化时路径会变，Dockerfile 用 `python -c` 动态定位。
-
-## 构建自带 provider 的镜像
-
-```bash
-docker build -f docker/Dockerfile -t music-assistant:2.10.8-bili .
 docker compose -f docker/compose.build.yml up -d
 ```
 
-镜像里预装 `segno==1.6.6`（二维码登录用）；stock 镜像没有它，setup flow 会自动降级为手填 SESSDATA。
+### Option C — drop it into a running container (quick test)
 
-## 预构建镜像（GHCR）
+```bash
+./scripts/install_docker.sh music-assistant   # container name; defaults to "music-assistant"
+```
 
-推 `main` 或 `v*` tag 时，GitHub Actions 会自动构建并推送：
+This copies the provider into the container and restarts it. The copy is lost when the container
+is re-created or the image is updated, so use Option A or B for a persistent installation.
+
+### Option D — bare metal / virtualenv
+
+```bash
+/path/to/ma-venv/bin/python scripts/install_venv.py
+```
+
+Run this with the Python interpreter of the Music Assistant environment. The script copies
+`provider/bilibili` into that interpreter's `music_assistant/providers` directory and never
+downloads anything. Music Assistant upgrades overwrite the package directory, so re-run the
+script afterwards.
+
+### After installing
+
+Restart Music Assistant, open **Settings → Providers → Add Provider → Bilibili**, and choose a
+sign-in method. QR login is recommended because it also grants access to your favorite folders;
+anonymous mode works for search and playback.
+
+Home Assistant OS does not provide a way to inject providers into the Music Assistant add-on, so
+the add-on installation is not supported — see [docs/INSTALL.md](docs/INSTALL.md).
+
+### Updating
+
+```bash
+docker compose pull music-assistant   # or: docker pull <image>
+docker compose up -d
+```
+
+Provider updates do not touch the `/data` volume. Music Assistant migrates its own database at
+start-up, so back up the data directory before upgrading Music Assistant itself.
+
+## Configuration
+
+All options live in the provider settings; credentials are collected by the setup flow.
+
+| Option | Default | Description |
+|---|---|---|
+| Audio quality ceiling | `auto` | Best stream the account allows. FLAC and Dolby require a premium membership; AAC 192/132/64 kbps are also available. |
+| Minimum duration | 60 s | Keyword-search results shorter than this are dropped. `0` disables the lower bound. |
+| Maximum duration | 900 s | Keyword-search results longer than this are dropped (hour-long mixes, courses). `0` disables the upper bound. |
+| Search result limit | 20 | Maximum number of tracks returned per search (1–50). |
+| Probe CDN before playback | on | Sends a 1 KB range request to the preferred CDN host and falls back to a backup host when it fails. |
+| Manual SESSDATA cookie | empty | Fallback sign-in when QR login is unavailable; `DedeUserID` is also required to read favorite folders. |
+
+Sign-in methods:
+
+| Method | What it enables |
+|---|---|
+| QR code | Full login: higher quality where entitled, favorite folders. Requires `segno`, which the images bundle. |
+| Manual `SESSDATA` + `DedeUserID` | Same as QR login, without the optional dependency. |
+| Anonymous | Search, charts and playback at anonymous quality; no favorite folders. |
+
+## UP collections as playlists
+
+A Bilibili "collection" (合集, `ugc_season`) is a curated group of videos made by an UP owner.
+The provider maps it to a Music Assistant **playlist**. Collections are explicit-only — they never
+show up in a keyword search unless you ask for one:
+
+| Entry point | What happens |
+|---|---|
+| `BSEASON:7817533` | Opens the collection with that id. |
+| `https://space.bilibili.com/3546851714271831/lists/7817533?type=season` | Paste a collection link (`channel/collectiondetail?sid=` links work too). |
+| `UP:3546851714271831` (or the UP's space URL) | Lists all collections of that UP. |
+| Search for `BV1FMsn6REhn` | If the video belongs to a collection, both the track and the collection are returned. |
+
+Collections appear in the **Playlists** section of the search results. Their tracks are paginated
+(100 per page), so a 169-video collection loads in two pages.
+
+Known limitations:
+
+- Collections only — "series" lists (`type=series`) and full UP upload lists are not supported.
+- Collection tracks play as-is: the search duration filter is not applied, so long mixes work.
+- Collections are not added to the Music Assistant library; open them from search or by id.
+- A bare numeric id is not treated as a collection, to avoid colliding with track names.
+
+## Prebuilt images and tags
+
+Images are published to:
 
 ```text
 ghcr.io/martinmc97/music-assistant
 ```
 
-- 平台：`linux/amd64`、`linux/arm64`
-- 标签：`2.10.8-bili-<commit>`（MA 2.10.8 + 某次 provider 构建，commit 为 7 位短 id）、`latest`（main）、`main`、`sha-<commit>`；tag `v0.1.0` 额外生成 `0.1.0`、`0.1`
-- 基础 MA 版本默认自动查询上游 latest stable；手动触发可指定版本，仓库变量 `MA_VERSION` 只在 API 查询失败时兜底
-- 上游发布新的 stable 版本时，`upstream-stable.yml` 每 6 小时检查一次；若 GHCR 上还没有对应的 `<version>-bili-<commit>`，先用该版本跑测试，通过后构建并推送 `latest`
-- 旧镜像名 `ghcr.io/martinmc97/bili-music-assistant-provider` 不再更新
+- Platforms: `linux/amd64`, `linux/arm64`; the package is public.
+- Tags: `2.10.13-bili-<7-character commit>` (pinned Music Assistant version + provider build),
+  `latest`, `main` and `sha-<sha>`. Git tags `v*` also produce semver tags (`0.1.0`, `0.1`).
+- [`docker-publish.yml`](.github/workflows/docker-publish.yml) builds on every push to `main` and
+  on `v*` tags. It resolves the newest upstream Music Assistant stable release by default; a
+  manual run can request a specific version, and the repository variable `MA_VERSION` is only a
+  fallback when the GitHub API is unreachable.
+- [`upstream-stable.yml`](.github/workflows/upstream-stable.yml) runs every six hours. When a new
+  Music Assistant stable release appears and the matching `<version>-bili-<commit>` tag does not
+  exist yet, it runs the test suite against that release and then builds, pushes and moves
+  `latest`.
 
-包是 public，可以直接匿名拉取；部署步骤见上面的 **方式 A**。
+Pinning the current stable build:
 
 ```bash
-docker pull ghcr.io/martinmc97/music-assistant:latest
-
-# 固定到某次 provider 构建
-docker pull ghcr.io/martinmc97/music-assistant:2.10.8-bili-<commit>
+docker pull ghcr.io/martinmc97/music-assistant:2.10.13-bili-11079f7
 ```
 
-## 参考与致谢
+## Known limitations
 
-- [**HanversionOvO/BiliMusic**](https://github.com/HanversionOvO/BiliMusic)：B 站接口行为、WBI 签名/扫码登录流程、DASH 音轨选择、标题清洗与噪声词思路的参考。
-- [**music-assistant/server**](https://github.com/music-assistant/server)：provider API、`StreamDetails` 与流式播放模型。
-- **Bilibili 公开 Web API**：视频/音频接口路径与播放协议。
+- No lyrics.
+- One track per video: multi-part videos are not expanded into one track per part yet.
+- No bangumi/OGV episodes; those entries are skipped in favorite folders.
+- Only UP collections are exposed: "series" lists are not supported, and full UP upload lists are
+  blocked by Bilibili's anti-abuse limits (in practice rarely reachable).
+- Keyword search returns tracks only; playlists come from explicit collection queries and your
+  favorite folders.
+- Bilibili audio (`au`) tracks usually offer a single bitrate, so FLAC/Dolby options only apply
+  to video DASH streams.
+- Content availability and quality depend on region, account entitlements and Bilibili's
+  anti-abuse limits. Playback URLs expire after a few hours, so a fresh one is resolved for
+  every playback.
+- The provider never writes to your Bilibili account: favorite folders stay read-only.
 
-> BiliMusic 仓库当前没有 `LICENSE` 文件。这里仅作接口行为与算法思路参考，未包含其源代码；如果上游后续补充许可证，或你认为某段实现与它过于接近，请开 issue，我们会调整或重写。
+## Repository layout
+
+```text
+provider/bilibili/   # the provider itself (Music Assistant domain: bilibili)
+tests/               # unit tests and recorded API fixtures
+docker/              # isolated dev server and image build
+scripts/             # development, installation and live E2E helpers
+docs/                # contracts, installation guide, plans and dev log
+artifacts/           # working notes and code reviews
+```
+
+## Local development
+
+The dev container runs an isolated Music Assistant instance and mounts the source tree, so it
+never touches an existing installation:
+
+```bash
+# Start the isolated server on http://localhost:18095 (data in .dev-data/)
+docker compose -f docker/compose.dev.yml up -d
+
+# Restart after source changes and follow the logs
+./scripts/dev.sh
+```
+
+Create an admin account on first start at <http://localhost:18095>, then add the **Bilibili**
+provider in Settings → Providers.
+
+The dev compose mounts the provider into the Music Assistant package inside the container. The
+mount path follows the image's Python version (`.../lib/python3.14/site-packages/music_assistant/`);
+update it if you change the base image.
+
+Run the same checks as upstream (tool versions are pinned in `pyproject.toml`):
+
+```bash
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/ruff check provider tests
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/ruff format --check provider tests
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python -m mypy
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/codespell provider tests scripts docs README.md README.zh-CN.md
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/check_provider_conventions.py
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python -m pytest -q
+```
+
+`.pre-commit-config.yaml` mirrors these checks locally (`pre-commit install`).
+
+### Live end-to-end checks
+
+These scripts hit the real Bilibili API and CDN (plus ffmpeg) and are not part of the unit suite:
+
+```bash
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_stream.py
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_collections.py
+docker exec -w /workspace bilibili-ma-dev /app/venv/bin/python scripts/e2e_audio.py
+```
+
+Unit tests mock the network. The live integration tests are opt-in:
+`RUN_LIVE=1 python -m pytest -m live tests/integration/`.
+
+## Credits
+
+- [**HanversionOvO/BiliMusic**](https://github.com/HanversionOvO/BiliMusic) — reference for
+  Bilibili endpoint behavior, WBI signing, QR login, DASH audio selection and title-cleaning
+  ideas.
+- [**music-assistant/server**](https://github.com/music-assistant/server) — the provider API,
+  `StreamDetails` and the streaming playback model.
+- **The public Bilibili web API** — video/audio endpoints and the playback protocol.
+
+> BiliMusic currently has no `LICENSE` file. It was used as a reference for interface behavior
+> and algorithms only; no source code was copied. If upstream adds a license, or you believe a
+> part of this implementation is too close to theirs, please open an issue and we will adjust or
+> rewrite it.
 
 ## License
 
-[Apache-2.0](LICENSE)。版权与归属见 [NOTICE](NOTICE)。
+[Apache-2.0](LICENSE); copyright and attribution details are in [NOTICE](NOTICE).
 
-本项目为**非官方项目**，与 Bilibili 无隶属、授权或背书关系；Apache-2.0 只授予代码版权许可，不授予 Bilibili 名称、logo 或商标的使用权。
+This is an **unofficial project** with no affiliation, authorization or endorsement from
+Bilibili. The Apache-2.0 license grants rights to this code only, not to the Bilibili name, logo
+or trademarks.
 
-## 免责声明
+## Disclaimer
 
-本项目不内置任何音视频资源。仅用于学习、研究与个人使用；请遵守当地法律与平台条款，不要用于侵权或规避平台限制。
+This project does not bundle any audio or video content. It is intended for learning, research
+and personal use. Follow your local laws and the platform's terms of service, and do not use it
+to infringe copyright or bypass platform restrictions.
